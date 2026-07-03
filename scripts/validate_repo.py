@@ -40,6 +40,8 @@ def add_required_file_errors(errors: list[str]) -> None:
         ROOT / "addons" / "funplay_mcp" / "core" / "funplay_update_checker.gd",
         ROOT / "addons" / "funplay_mcp" / "runtime" / "funplay_mcp_runtime_bridge.gd",
         ROOT / "scripts" / "package_release.py",
+        ROOT / "scripts" / "run_godot_smoke.py",
+        ROOT / "scripts" / "godot_runtime_bridge_smoke.gd",
         ROOT / ".github" / "workflows" / "release.yml",
         SERVER_JSON,
         WRAPPER_PACKAGE_JSON,

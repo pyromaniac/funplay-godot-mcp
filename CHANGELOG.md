@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [0.9.5] - 2026-07-03
+
+### Added
+- Added runtime bridge command tools for play-mode node queries, runtime viewport screenshots, input injection, and runtime event history.
+- Added `query_runtime_node`, `capture_runtime_view`, `send_runtime_input`, `get_runtime_events`, and the `godot://runtime/events` resource.
+- Added checksum-aware GitHub Release artifact detection to the Dock update checker, including package zip, release manifest, SHA256 sums, and `server.json` readiness.
+- Added a Dock dashboard summary for project/server/tool exposure, runtime bridge heartbeat, and release readiness.
+- Added `get_dashboard_status` and `godot://dashboard/status` for compact product status snapshots.
+- Added local Godot runtime bridge smoke scripts for release validation.
+
+### Fixed
+- Cleaned up the Dock update checker HTTP request synchronously on plugin shutdown to avoid Godot headless editor exit warnings.
+- Fixed `list_autoloads` so newly saved autoload entries are discovered from `project.godot` even when Godot's runtime property list has not refreshed yet.
+- Made runtime bridge command tools wait for a fresh play-mode heartbeat before writing commands, avoiding stale `exit` state races when querying immediately after entering Play Mode.
+- Cleared stale runtime command/response files when a new runtime bridge session starts, preventing commands from an older Play Mode session from being replayed.
+
 ## [0.9.4] - 2026-06-23
 
 ### Fixed

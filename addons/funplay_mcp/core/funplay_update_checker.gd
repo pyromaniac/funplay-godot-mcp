@@ -13,6 +13,7 @@ var _current_version: String = DEFAULT_VERSION
 var _latest_version: String = ""
 var _latest_release_url: String = DEFAULT_RELEASES_URL
 var _latest_published_at: String = ""
+var _release_artifacts: Dictionary = {}
 var _status_message: String = "Updates: Not checked"
 var _is_checking: bool = false
 var _has_update: bool = false
@@ -32,8 +33,16 @@ func setup(owner: Node) -> void:
 
 func teardown() -> void:
 	if _request != null and is_instance_valid(_request):
-		_request.queue_free()
+		if _is_checking and _request.has_method("cancel_request"):
+			_request.cancel_request()
+		if _request.request_completed.is_connected(_on_request_completed):
+			_request.request_completed.disconnect(_on_request_completed)
+		var parent: Node = _request.get_parent()
+		if parent != null:
+			parent.remove_child(_request)
+		_request.free()
 	_request = null
+	_is_checking = false
 
 
 func get_state() -> Dictionary:
@@ -42,6 +51,7 @@ func get_state() -> Dictionary:
 		"latest_version": _latest_version,
 		"latest_release_url": _latest_release_url,
 		"latest_published_at": _latest_published_at,
+		"release_artifacts": _release_artifacts,
 		"status_message": _status_message,
 		"is_checking": _is_checking,
 		"has_update": _has_update,
@@ -102,6 +112,7 @@ func _on_request_completed(result: int, response_code: int, _headers: PackedStri
 	_latest_version = _normalize_version(str(parsed.get("tag_name", "")))
 	_latest_release_url = str(parsed.get("html_url", DEFAULT_RELEASES_URL))
 	_latest_published_at = str(parsed.get("published_at", ""))
+	_release_artifacts = _summarize_release_artifacts(parsed.get("assets", []), _latest_version)
 
 	if _latest_version == DEFAULT_VERSION:
 		_status_message = "Updates: Latest release has no valid version"
@@ -115,6 +126,12 @@ func _on_request_completed(result: int, response_code: int, _headers: PackedStri
 	else:
 		_has_update = false
 		_status_message = "Updates: Local v%s is newer than latest v%s" % [_current_version, _latest_version]
+
+	if _latest_version != DEFAULT_VERSION:
+		if bool(_release_artifacts.get("verification_ready", false)):
+			_status_message += " · release checksums found"
+		else:
+			_status_message += " · checksum assets missing"
 
 	state_changed.emit()
 
@@ -154,3 +171,56 @@ func _parse_version(version: String) -> Array:
 	for i in range(min(3, raw_parts.size())):
 		parts[i] = int(raw_parts[i]) if raw_parts[i].is_valid_int() else 0
 	return parts
+
+
+func _summarize_release_artifacts(raw_assets, version: String) -> Dictionary:
+	var expected_package_name: String = "Funplay.GodotMcp.v%s.zip" % version
+	var summary: Dictionary = {
+		"asset_count": 0,
+		"expected_package": expected_package_name,
+		"package": {},
+		"manifest": {},
+		"sha256s": {},
+		"server_json": {},
+		"package_matches_version": false,
+		"verification_ready": false,
+		"registry_ready": false,
+	}
+	if not (raw_assets is Array):
+		return summary
+
+	for raw_asset in raw_assets:
+		if not (raw_asset is Dictionary):
+			continue
+		summary["asset_count"] = int(summary.get("asset_count", 0)) + 1
+		var asset: Dictionary = _asset_summary(raw_asset)
+		var asset_name: String = str(asset.get("name", ""))
+		if asset_name == expected_package_name:
+			summary["package"] = asset
+			summary["package_matches_version"] = true
+		elif asset_name.begins_with("Funplay.GodotMcp.v") and asset_name.ends_with(".zip") and _is_empty_dictionary(summary.get("package", {})):
+			summary["package"] = asset
+		elif asset_name == "release-manifest.json":
+			summary["manifest"] = asset
+		elif asset_name == "SHA256SUMS.txt":
+			summary["sha256s"] = asset
+		elif asset_name == "server.json":
+			summary["server_json"] = asset
+
+	summary["verification_ready"] = not _is_empty_dictionary(summary.get("package", {})) and (not _is_empty_dictionary(summary.get("manifest", {})) or not _is_empty_dictionary(summary.get("sha256s", {})))
+	summary["registry_ready"] = not _is_empty_dictionary(summary.get("server_json", {}))
+	return summary
+
+
+func _asset_summary(raw_asset: Dictionary) -> Dictionary:
+	return {
+		"name": str(raw_asset.get("name", "")),
+		"size": int(raw_asset.get("size", 0)),
+		"download_url": str(raw_asset.get("browser_download_url", "")),
+		"content_type": str(raw_asset.get("content_type", "")),
+		"state": str(raw_asset.get("state", "")),
+	}
+
+
+func _is_empty_dictionary(value) -> bool:
+	return value is Dictionary and value.is_empty()

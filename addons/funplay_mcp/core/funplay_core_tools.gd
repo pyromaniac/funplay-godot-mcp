@@ -41,6 +41,9 @@ const SIZE_FLAG_MAP = {
 const RUNTIME_BRIDGE_AUTOLOAD_NAME = "FunplayMcpRuntimeBridge"
 const RUNTIME_BRIDGE_SCRIPT_PATH = "res://addons/funplay_mcp/runtime/funplay_mcp_runtime_bridge.gd"
 const RUNTIME_BRIDGE_STATE_PATH = "user://funplay_mcp_runtime_bridge.json"
+const RUNTIME_BRIDGE_COMMAND_PATH = "user://funplay_mcp_runtime_command.json"
+const RUNTIME_BRIDGE_RESPONSE_PATH = "user://funplay_mcp_runtime_response.json"
+const RUNTIME_BRIDGE_FRESH_STATE_MSEC = 3000
 const LANGUAGE_MODE_CACHE_TTL_MSEC = 5000
 
 var _language_mode_cache: String = ""
@@ -2995,7 +2998,7 @@ func funplay_help(arguments: Dictionary) -> String:
 			"title": "Runtime validation workflow",
 			"steps": [
 				"Install the runtime bridge if you need game-side heartbeat state during play mode.",
-				"Enter play mode, simulate input, then inspect get_runtime_bridge_status, get_console_logs, and get_performance_snapshot.",
+				"Enter play mode, use send_runtime_input or simulate_input_sequence, then inspect query_runtime_node, capture_runtime_view, get_runtime_events, get_console_logs, and get_performance_snapshot.",
 				"Use assertion tools for quick validation of edited scene state.",
 			],
 		},
@@ -3053,6 +3056,62 @@ func funplay_help(arguments: Dictionary) -> String:
 	})
 
 
+func get_dashboard_status(arguments: Dictionary) -> String:
+	var profile: String = _settings.tool_profile if _settings != null else "core"
+	var language_mode: String = detect_script_language_mode()
+	var runtime_status: Dictionary = _build_runtime_bridge_status()
+	var runtime_state = runtime_status.get("state", {})
+	var tool_summary: Dictionary = _tool_registry.get_exposure_summary(profile) if _tool_registry != null and _tool_registry.has_method("get_exposure_summary") else {}
+	var dashboard: Dictionary = {
+		"project": {
+			"name": str(ProjectSettings.get_setting("application/config/name", "")),
+			"root": ProjectSettings.globalize_path("res://"),
+			"main_scene": str(ProjectSettings.get_setting("application/run/main_scene", "")),
+			"language_mode": language_mode,
+		},
+		"server": {
+			"endpoint": "http://127.0.0.1:%d/" % (_settings.server_port if _settings != null else 8765),
+			"enabled": _settings.server_enabled if _settings != null else true,
+			"profile": profile,
+			"debug_logging_enabled": _settings.debug_logging_enabled if _settings != null else false,
+			"execute_code_safety_checks_enabled": _settings.execute_code_safety_checks_enabled if _settings != null else true,
+		},
+		"tools": {
+			"profile": profile,
+			"language_mode": str(tool_summary.get("language_mode", language_mode)),
+			"total_in_profile": int(tool_summary.get("total_in_profile", 0)),
+			"exposed": int(tool_summary.get("exposed", 0)),
+			"disabled": int(tool_summary.get("disabled", 0)),
+			"language_hidden": int(tool_summary.get("language_hidden", 0)),
+		},
+		"runtime": {
+			"installed": bool(runtime_status.get("installed", false)),
+			"state_seen": bool(runtime_status.get("state_exists", false)),
+			"command_channel": bool(runtime_status.get("script_exists", false)) and bool(runtime_status.get("state_exists", false)),
+			"status": str(runtime_state.get("status", "")) if runtime_state is Dictionary else "",
+			"fps": int(runtime_state.get("fps", 0)) if runtime_state is Dictionary else 0,
+			"node_count": int(runtime_state.get("node_count", 0)) if runtime_state is Dictionary else 0,
+			"event_count": runtime_state.get("runtime_events", []).size() if runtime_state is Dictionary and runtime_state.get("runtime_events", []) is Array else 0,
+			"current_scene": runtime_state.get("current_scene", null) if runtime_state is Dictionary else null,
+			"last_command_id": str(runtime_state.get("last_command_id", "")) if runtime_state is Dictionary else "",
+		},
+	}
+	if bool(arguments.get("include_release", true)):
+		var release_status: Dictionary = _parse_json_dict(get_release_readiness({"include_commands": false}))
+		dashboard["release"] = {
+			"ready": bool(release_status.get("ready", false)),
+			"version": str(release_status.get("version", "")),
+			"pass_count": _count_release_checks(release_status, "pass"),
+			"fail_count": _count_release_checks(release_status, "fail"),
+			"checks": release_status.get("checks", []),
+			"targets": release_status.get("release_targets", {}),
+		}
+	if bool(arguments.get("include_workflows", true)):
+		var workflow_status: Dictionary = _parse_json_dict(list_workflow_coverage({}))
+		dashboard["workflows"] = _compact_workflow_coverage(workflow_status.get("coverage", []))
+	return _render_variant(dashboard)
+
+
 func get_capability_status(_arguments: Dictionary) -> String:
 	var editor = _editor()
 	var scene_root = editor.get_edited_scene_root()
@@ -3084,6 +3143,7 @@ func get_capability_status(_arguments: Dictionary) -> String:
 			"undo_redo": undo_redo != null,
 			"runtime_bridge_installed": bool(runtime_status.get("installed", false)),
 			"runtime_bridge_state_seen": bool(runtime_status.get("state_exists", false)),
+			"runtime_bridge_command_channel": bool(runtime_status.get("script_exists", false)) and bool(runtime_status.get("state_exists", false)),
 		},
 		"tool_profile": _settings.tool_profile if _settings != null else "core",
 		"disabled_tool_count": _settings.disabled_tools.size() if _settings != null else 0,
@@ -3155,7 +3215,8 @@ func get_release_readiness(arguments: Dictionary) -> String:
 	if bool(arguments.get("include_commands", true)):
 		result["commands"] = [
 			"python3 scripts/validate_repo.py",
-			"python3 -m py_compile scripts/validate_repo.py scripts/package_release.py",
+			"python3 -m py_compile scripts/validate_repo.py scripts/package_release.py scripts/run_godot_smoke.py",
+			"python3 scripts/run_godot_smoke.py",
 			"node --check stdio-wrapper/bin/funplay-godot-mcp.js",
 			"python3 scripts/package_release.py --version %s" % requested_version,
 			"python3 scripts/package_release.py --verify-zip dist/v%s/Funplay.GodotMcp.v%s.zip" % [requested_version, requested_version],
@@ -3240,6 +3301,47 @@ func get_runtime_bridge_status(_arguments: Dictionary) -> String:
 	return _render_variant(_build_runtime_bridge_status())
 
 
+func query_runtime_node(arguments: Dictionary) -> String:
+	return _render_runtime_bridge_command("query_node", arguments)
+
+
+func capture_runtime_view(arguments: Dictionary) -> String:
+	return _render_runtime_bridge_command("capture_view", arguments)
+
+
+func send_runtime_input(arguments: Dictionary) -> String:
+	return _render_runtime_bridge_command("send_input", arguments)
+
+
+func get_runtime_events(arguments: Dictionary) -> String:
+	var max_events: int = int(clamp(int(arguments.get("max_events", 100)), 1, 500))
+	var command_arguments: Dictionary = arguments.duplicate(true)
+	command_arguments.erase("max_events")
+	var response: Dictionary = _send_runtime_bridge_command("get_events", command_arguments)
+	if bool(response.get("success", false)):
+		var result = response.get("result", {})
+		if result is Dictionary:
+			result["events"] = _tail_array(result.get("events", []), max_events)
+			result["returned_event_count"] = result["events"].size()
+			response["result"] = result
+		return _render_variant(response)
+
+	var status: Dictionary = _build_runtime_bridge_status()
+	var state = status.get("state", {})
+	if state is Dictionary:
+		var runtime_events = state.get("runtime_events", [])
+		if runtime_events is Array and not runtime_events.is_empty():
+			return _render_variant({
+				"success": false,
+				"source": "last_runtime_state",
+				"error": response.get("error", "Runtime bridge did not respond to get_events."),
+				"events": _tail_array(runtime_events, max_events),
+				"event_count": runtime_events.size(),
+				"status": status,
+			})
+	return _render_variant(response)
+
+
 func list_workflow_coverage(_arguments: Dictionary) -> String:
 	var profile: String = _settings.tool_profile if _settings != null else "core"
 	var catalog: Dictionary = _tool_registry.get_tool_catalog(profile, "", false) if _tool_registry != null and _tool_registry.has_method("get_tool_catalog") else {}
@@ -3254,7 +3356,7 @@ func list_workflow_coverage(_arguments: Dictionary) -> String:
 			_build_coverage_item("Scene and node editing", ["create_node", "set_node_property", "set_transform_2d", "save_scene", "editor_undo"], exposed_tools),
 			_build_coverage_item("Script editing and diagnostics", ["read_file", "patch_script", "validate_script", "get_script_errors", "get_editor_protocol_status"], exposed_tools),
 			_build_coverage_item("Script refactor planning", ["plan_script_refactor", "apply_script_refactor", "find_usages", "validate_script"], exposed_tools),
-			_build_coverage_item("Runtime validation", ["enter_play_mode", "simulate_action", "get_runtime_bridge_status", "get_console_logs"], exposed_tools),
+			_build_coverage_item("Runtime validation", ["enter_play_mode", "simulate_action", "get_runtime_bridge_status", "query_runtime_node", "capture_runtime_view", "send_runtime_input", "get_runtime_events", "get_console_logs"], exposed_tools),
 			_build_coverage_item("UI authoring", ["create_ui_root", "create_control", "set_control_layout", "set_control_text"], exposed_tools),
 			_build_coverage_item("Asset import planning", ["plan_asset_import", "select_file", "request_script_reload"], exposed_tools),
 			_build_coverage_item("Project configuration", ["list_project_settings", "set_project_setting", "list_input_actions", "list_autoloads"], exposed_tools),
@@ -3538,7 +3640,16 @@ func _read_json_file(path: String) -> Dictionary:
 	var text: String = _read_text_if_exists(path)
 	if text == "":
 		return {}
-	var parsed = JSON.parse_string(text)
+	return _parse_json_dict(text)
+
+
+func _parse_json_dict(text: String) -> Dictionary:
+	if text.strip_edges() == "":
+		return {}
+	var json := JSON.new()
+	if json.parse(text) != OK:
+		return {}
+	var parsed = json.data
 	if parsed is Dictionary:
 		return parsed
 	return {}
@@ -3748,6 +3859,10 @@ func _build_runtime_bridge_status() -> Dictionary:
 		var parsed = JSON.parse_string(FileAccess.get_file_as_string(RUNTIME_BRIDGE_STATE_PATH))
 		if parsed is Dictionary:
 			state = parsed
+	var state_modified_unix: int = int(FileAccess.get_modified_time(RUNTIME_BRIDGE_STATE_PATH)) if state_exists else 0
+	var state_age_msec: int = -1
+	if state_modified_unix > 0:
+		state_age_msec = max(0, int((Time.get_unix_time_from_system() - float(state_modified_unix)) * 1000.0))
 	return {
 		"installed": ProjectSettings.has_setting(key),
 		"autoload_name": RUNTIME_BRIDGE_AUTOLOAD_NAME,
@@ -3757,8 +3872,172 @@ func _build_runtime_bridge_status() -> Dictionary:
 		"script_path": RUNTIME_BRIDGE_SCRIPT_PATH,
 		"state_exists": state_exists,
 		"state_path": RUNTIME_BRIDGE_STATE_PATH,
+		"command_path": RUNTIME_BRIDGE_COMMAND_PATH,
+		"response_path": RUNTIME_BRIDGE_RESPONSE_PATH,
+		"response_exists": FileAccess.file_exists(RUNTIME_BRIDGE_RESPONSE_PATH),
+		"latest_response": _summarize_runtime_response(_read_json_file(RUNTIME_BRIDGE_RESPONSE_PATH)),
+		"state_modified_unix": state_modified_unix,
+		"state_age_msec": state_age_msec,
 		"state": state,
 	}
+
+
+func _render_runtime_bridge_command(command_name: String, arguments: Dictionary) -> String:
+	return _render_variant(_send_runtime_bridge_command(command_name, arguments))
+
+
+func _send_runtime_bridge_command(command_name: String, arguments: Dictionary) -> Dictionary:
+	var timeout_msec: int = int(clamp(int(arguments.get("timeout_msec", 10000)), 100, 30000))
+	var start_msec: int = Time.get_ticks_msec()
+	var status: Dictionary = _build_runtime_bridge_status()
+	if not bool(status.get("script_exists", false)):
+		return {
+			"success": false,
+			"command": command_name,
+			"error": "Runtime bridge script is missing.",
+			"status": status,
+		}
+	if not bool(status.get("installed", false)) and not bool(status.get("state_exists", false)):
+		return {
+			"success": false,
+			"command": command_name,
+			"error": "Runtime bridge is not installed or has not written state. Call install_runtime_bridge, enter play mode, then retry.",
+			"status": status,
+		}
+	status = _wait_for_runtime_bridge_ready(status, timeout_msec, start_msec)
+	if not _is_runtime_bridge_ready(status):
+		var state = status.get("state", {})
+		var runtime_status: String = str(state.get("status", "")) if state is Dictionary else ""
+		return {
+			"success": false,
+			"command": command_name,
+			"error": "Runtime bridge is not ready yet. Enter play mode and wait for a fresh bridge heartbeat.",
+			"runtime_status": runtime_status,
+			"timeout_msec": timeout_msec,
+			"status": status,
+		}
+
+	var command_id: String = "%s_%d" % [command_name, Time.get_ticks_usec()]
+	var command_arguments: Dictionary = arguments.duplicate(true)
+	command_arguments.erase("timeout_msec")
+	var payload: Dictionary = {
+		"id": command_id,
+		"command": command_name,
+		"arguments": command_arguments,
+		"timestamp": Time.get_datetime_string_from_system(true, true),
+	}
+	var command_file: FileAccess = FileAccess.open(RUNTIME_BRIDGE_COMMAND_PATH, FileAccess.WRITE)
+	if command_file == null:
+		return {
+			"success": false,
+			"command": command_name,
+			"command_id": command_id,
+			"error": "Failed to write runtime bridge command.",
+			"path": RUNTIME_BRIDGE_COMMAND_PATH,
+			"open_error": FileAccess.get_open_error(),
+		}
+	command_file.store_string(JSON.stringify(payload, "\t") + "\n")
+	command_file = null
+
+	var poll_interval_msec: int = 25
+	while Time.get_ticks_msec() - start_msec <= timeout_msec:
+		var response: Dictionary = _read_json_file(RUNTIME_BRIDGE_RESPONSE_PATH)
+		if str(response.get("id", "")) == command_id:
+			var success: bool = bool(response.get("success", false))
+			return {
+				"success": success,
+				"command": command_name,
+				"command_id": command_id,
+				"elapsed_msec": Time.get_ticks_msec() - start_msec,
+				"result": response.get("result", {}),
+				"response": _summarize_runtime_response(response),
+				"error": str(response.get("error", "")) if not success else "",
+			}
+		OS.delay_msec(poll_interval_msec)
+
+	return {
+		"success": false,
+		"command": command_name,
+		"command_id": command_id,
+		"error": "Timed out waiting for runtime bridge response.",
+		"timeout_msec": timeout_msec,
+		"status": _build_runtime_bridge_status(),
+	}
+
+
+func _wait_for_runtime_bridge_ready(status: Dictionary, timeout_msec: int, start_msec: int) -> Dictionary:
+	var latest_status: Dictionary = status
+	var poll_interval_msec: int = 50
+	while Time.get_ticks_msec() - start_msec <= timeout_msec:
+		if _is_runtime_bridge_ready(latest_status):
+			return latest_status
+		OS.delay_msec(poll_interval_msec)
+		latest_status = _build_runtime_bridge_status()
+	return latest_status
+
+
+func _is_runtime_bridge_ready(status: Dictionary) -> bool:
+	if not bool(status.get("state_exists", false)):
+		return false
+	var state = status.get("state", {})
+	if not (state is Dictionary):
+		return false
+	var runtime_status: String = str(state.get("status", ""))
+	if not (runtime_status in ["ready", "running", "command"]):
+		return false
+	var state_age_msec: int = int(status.get("state_age_msec", -1))
+	return state_age_msec < 0 or state_age_msec <= RUNTIME_BRIDGE_FRESH_STATE_MSEC
+
+
+func _summarize_runtime_response(response: Dictionary) -> Dictionary:
+	if response.is_empty():
+		return {}
+	var summary: Dictionary = response.duplicate(true)
+	var result = summary.get("result", {})
+	if result is Dictionary and result.has("data_uri"):
+		var data_uri: String = str(result.get("data_uri", ""))
+		result["data_uri"] = "<omitted:%d chars>" % data_uri.length()
+		summary["result"] = result
+	return summary
+
+
+func _tail_array(items, max_items: int) -> Array:
+	if not (items is Array):
+		return []
+	var capped: int = int(clamp(max_items, 1, 1000))
+	if items.size() <= capped:
+		return items.duplicate(true)
+	var result: Array = []
+	for index in range(items.size() - capped, items.size()):
+		result.append(items[index])
+	return result
+
+
+func _count_release_checks(release_status: Dictionary, status: String) -> int:
+	var checks = release_status.get("checks", [])
+	if not (checks is Array):
+		return 0
+	var count: int = 0
+	for check in checks:
+		if check is Dictionary and str(check.get("status", "")) == status:
+			count += 1
+	return count
+
+
+func _compact_workflow_coverage(coverage) -> Array:
+	if not (coverage is Array):
+		return []
+	var result: Array = []
+	for item in coverage:
+		if not (item is Dictionary):
+			continue
+		result.append({
+			"name": str(item.get("name", "")),
+			"coverage": float(item.get("coverage", 0.0)),
+			"available_count": item.get("available", []).size() if item.get("available", []) is Array else 0,
+			"missing": item.get("missing", []),
+		})
+	return result
 
 
 func _build_coverage_item(name: String, tools: Array, exposed_tools: Array) -> Dictionary:
@@ -4655,14 +4934,26 @@ func _read_plugin_cfg(path: String) -> Dictionary:
 
 
 func _list_autoloads() -> Array:
-	var autoloads: Array = []
+	var autoload_map: Dictionary = {}
 	for property_info in ProjectSettings.get_property_list():
 		var name = str(property_info.get("name", ""))
 		if name.begins_with("autoload/"):
-			autoloads.append({
-				"name": name.trim_prefix("autoload/"),
-				"path": str(ProjectSettings.get_setting(name, "")),
-			})
+			autoload_map[name.trim_prefix("autoload/")] = str(ProjectSettings.get_setting(name, ""))
+
+	var project_config = ConfigFile.new()
+	var project_config_path = ProjectSettings.globalize_path("res://project.godot")
+	if project_config.load(project_config_path) == OK and project_config.has_section("autoload"):
+		for key in project_config.get_section_keys("autoload"):
+			autoload_map[str(key)] = str(project_config.get_value("autoload", str(key), ""))
+
+	var autoload_names: Array = autoload_map.keys()
+	autoload_names.sort()
+	var autoloads: Array = []
+	for autoload_name in autoload_names:
+		autoloads.append({
+			"name": autoload_name,
+			"path": str(autoload_map.get(autoload_name, "")),
+		})
 	return autoloads
 
 

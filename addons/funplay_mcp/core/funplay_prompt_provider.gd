@@ -155,9 +155,11 @@ func get_prompt(name: String, arguments: Dictionary) -> Dictionary:
 					"role": "user",
 					"content": {
 						"type": "text",
-						"text": "Issue: %s\n\nUse the current play-state, performance snapshot, recent logs, script error summary, scene structure, and selection context to propose a concrete debugging workflow and likely root causes.\n\nPlay state:\n%s\n\nPerformance:\n%s\n\nRecent logs:\n%s\n\nScript errors:\n%s\n\nScene:\n%s" % [
+						"text": "Issue: %s\n\nUse the current play-state, runtime bridge status/events, performance snapshot, recent logs, script error summary, scene structure, and selection context to propose a concrete debugging workflow and likely root causes. Separate observed evidence from hypotheses.\n\nPlay state:\n%s\n\nRuntime bridge:\n%s\n\nRuntime events:\n%s\n\nPerformance:\n%s\n\nRecent logs:\n%s\n\nScript errors:\n%s\n\nScene:\n%s" % [
 							issue,
 							_core_tools.get_play_state({}),
+							_core_tools.get_runtime_bridge_status({}),
+							_core_tools.get_runtime_events({"max_events": 50, "timeout_msec": 300}),
 							_core_tools.get_performance_snapshot({}),
 							_core_tools.get_console_logs({"max_lines": 120}),
 							_core_tools.get_script_errors({"max_files": 200}),

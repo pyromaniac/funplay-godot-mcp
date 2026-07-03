@@ -89,6 +89,12 @@ func list_resources() -> Array:
 			"mimeType": "application/json",
 		},
 		{
+			"uri": "godot://dashboard/status",
+			"name": "Dashboard Status",
+			"description": "Compact project, server, tools, runtime, release, and workflow dashboard.",
+			"mimeType": "application/json",
+		},
+		{
 			"uri": "godot://runtime/bridge",
 			"name": "Runtime Bridge",
 			"description": "Runtime bridge install status and latest play-mode heartbeat state.",
@@ -98,6 +104,12 @@ func list_resources() -> Array:
 			"uri": "godot://runtime/scene_tree",
 			"name": "Runtime Scene Tree",
 			"description": "Latest play-mode scene tree snapshot written by the runtime bridge.",
+			"mimeType": "application/json",
+		},
+		{
+			"uri": "godot://runtime/events",
+			"name": "Runtime Events",
+			"description": "Recent runtime bridge lifecycle and command events.",
 			"mimeType": "application/json",
 		},
 		{
@@ -222,10 +234,14 @@ func read_resource(uri: String) -> Dictionary:
 		return _content_response(uri, _core_tools.list_tool_catalog({"include_hidden": true}), "application/json")
 	if uri == "godot://capabilities/status":
 		return _content_response(uri, _core_tools.get_capability_status({}), "application/json")
+	if uri == "godot://dashboard/status":
+		return _content_response(uri, _core_tools.get_dashboard_status({}), "application/json")
 	if uri == "godot://runtime/bridge":
 		return _content_response(uri, _core_tools.get_runtime_bridge_status({}), "application/json")
 	if uri == "godot://runtime/scene_tree":
 		return _content_response(uri, _runtime_scene_tree(), "application/json")
+	if uri == "godot://runtime/events":
+		return _content_response(uri, _core_tools.get_runtime_events({"max_events": 100}), "application/json")
 	if uri == "godot://workflow/coverage":
 		return _content_response(uri, _core_tools.list_workflow_coverage({}), "application/json")
 	if uri == "godot://release/readiness":

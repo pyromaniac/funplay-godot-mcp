@@ -5,6 +5,9 @@ const FunplayProjectSkillManager = preload("res://addons/funplay_mcp/core/funpla
 const FunplayUpdateChecker = preload("res://addons/funplay_mcp/core/funplay_update_checker.gd")
 
 const REFRESH_INTERVAL_MSEC = 1000
+const READINESS_REFRESH_INTERVAL_MSEC = 5000
+const RUNTIME_BRIDGE_AUTOLOAD_NAME = "FunplayMcpRuntimeBridge"
+const RUNTIME_BRIDGE_STATE_PATH = "user://funplay_mcp_runtime_bridge.json"
 
 var _server
 var _settings
@@ -18,6 +21,9 @@ var _version_label: Label
 var _update_status_label: Label
 var _check_updates_button: Button
 var _open_release_button: Button
+var _dashboard_status_label: Label
+var _runtime_status_label: Label
+var _release_readiness_label: Label
 var _status_label: Label
 var _endpoint_label: Label
 var _enable_checkbox: CheckBox
@@ -36,6 +42,8 @@ var _config_status_label: Label
 var _config_path_label: Label
 var _skill_status_label: Label
 var _last_refresh_msec: int = 0
+var _last_release_readiness_msec: int = 0
+var _release_readiness_cache: Dictionary = {}
 var _last_tool_exposure_signature: String = ""
 var _updating_tool_checks: bool = false
 var _needs_refresh_when_visible: bool = true
@@ -92,6 +100,7 @@ func refresh_live_state(force: bool = false) -> void:
 	_refresh_config_status()
 	_refresh_skill_status()
 	_refresh_update_state()
+	_refresh_dashboard_status(force)
 
 
 func _build_ui() -> void:
@@ -144,6 +153,39 @@ func _build_ui() -> void:
 	_open_release_button.text = "Open Release"
 	_open_release_button.pressed.connect(_open_latest_release)
 	update_row.add_child(_open_release_button)
+
+	var dashboard_title = Label.new()
+	dashboard_title.text = "Dashboard"
+	dashboard_title.add_theme_font_size_override("font_size", 14)
+	content.add_child(dashboard_title)
+
+	_dashboard_status_label = Label.new()
+	_dashboard_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	content.add_child(_dashboard_status_label)
+
+	_runtime_status_label = Label.new()
+	_runtime_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	content.add_child(_runtime_status_label)
+
+	var runtime_actions = HBoxContainer.new()
+	runtime_actions.add_theme_constant_override("separation", 6)
+	content.add_child(runtime_actions)
+
+	var install_bridge_button = Button.new()
+	install_bridge_button.text = "Install Bridge"
+	install_bridge_button.tooltip_text = "Install the optional play-mode runtime bridge autoload."
+	install_bridge_button.pressed.connect(_install_runtime_bridge)
+	runtime_actions.add_child(install_bridge_button)
+
+	var remove_bridge_button = Button.new()
+	remove_bridge_button.text = "Remove Bridge"
+	remove_bridge_button.tooltip_text = "Remove the optional play-mode runtime bridge autoload."
+	remove_bridge_button.pressed.connect(_remove_runtime_bridge)
+	runtime_actions.add_child(remove_bridge_button)
+
+	_release_readiness_label = Label.new()
+	_release_readiness_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	content.add_child(_release_readiness_label)
 
 	_status_label = Label.new()
 	content.add_child(_status_label)
@@ -369,6 +411,22 @@ func _open_latest_release() -> void:
 	_update_checker.open_latest_release()
 
 
+func _install_runtime_bridge() -> void:
+	if _tool_registry == null:
+		_runtime_status_label.text = "Runtime: tool registry unavailable."
+		return
+	_runtime_status_label.text = _tool_registry.call_tool("install_runtime_bridge", {"save": true})
+	refresh_live_state(true)
+
+
+func _remove_runtime_bridge() -> void:
+	if _tool_registry == null:
+		_runtime_status_label.text = "Runtime: tool registry unavailable."
+		return
+	_runtime_status_label.text = _tool_registry.call_tool("remove_runtime_bridge", {"save": true})
+	refresh_live_state(true)
+
+
 func _open_project_map() -> void:
 	if _tool_registry == null:
 		_map_status_label.text = "Project map unavailable."
@@ -460,6 +518,80 @@ func _refresh_skill_status() -> void:
 		_set_label_text(_skill_status_label, "Project skills: Not generated")
 
 
+func _refresh_dashboard_status(force: bool) -> void:
+	if _dashboard_status_label == null or _runtime_status_label == null or _release_readiness_label == null:
+		return
+
+	var project_name: String = str(ProjectSettings.get_setting("application/config/name", "Godot Project"))
+	var server_status: String = "Stopped"
+	if _server != null and _server.is_running():
+		server_status = "Attached" if _server.has_method("is_attached_to_existing") and _server.is_attached_to_existing() else "Running"
+
+	var tool_summary: Dictionary = _tool_registry.get_exposure_summary(_settings.tool_profile) if _tool_registry != null and _tool_registry.has_method("get_exposure_summary") else {}
+	_set_label_text(_dashboard_status_label, "Project: %s\nServer: %s · Profile: %s · Tools: %d/%d exposed" % [
+		project_name,
+		server_status,
+		str(tool_summary.get("profile", _settings.tool_profile)),
+		int(tool_summary.get("exposed", 0)),
+		int(tool_summary.get("total_in_profile", 0)),
+	])
+
+	var runtime_status: Dictionary = _read_json_file(RUNTIME_BRIDGE_STATE_PATH)
+	var runtime_installed: bool = ProjectSettings.has_setting("autoload/%s" % RUNTIME_BRIDGE_AUTOLOAD_NAME)
+	if runtime_status.is_empty():
+		_set_label_text(_runtime_status_label, "Runtime: bridge %s · heartbeat not seen" % ("installed" if runtime_installed else "not installed"))
+	else:
+		var current_scene = runtime_status.get("current_scene", {})
+		var scene_label: String = str(current_scene.get("name", "")) if current_scene is Dictionary else ""
+		var events = runtime_status.get("runtime_events", [])
+		_set_label_text(_runtime_status_label, "Runtime: %s · %s · FPS %d · Nodes %d · Events %d%s" % [
+			"installed" if runtime_installed else "not installed",
+			str(runtime_status.get("status", "")),
+			int(runtime_status.get("fps", 0)),
+			int(runtime_status.get("node_count", 0)),
+			events.size() if events is Array else 0,
+			" · Scene %s" % scene_label if scene_label != "" else "",
+		])
+
+	var readiness: Dictionary = _get_release_readiness_cache(force)
+	if readiness.is_empty():
+		_set_label_text(_release_readiness_label, "Release: readiness unavailable")
+		_release_readiness_label.tooltip_text = ""
+		return
+	var checks = readiness.get("checks", [])
+	var pass_count: int = 0
+	var fail_count: int = 0
+	var failing: Array[String] = []
+	if checks is Array:
+		for check in checks:
+			if not (check is Dictionary):
+				continue
+			if str(check.get("status", "")) == "pass":
+				pass_count += 1
+			else:
+				fail_count += 1
+				failing.append("%s: %s" % [str(check.get("name", "")), str(check.get("message", ""))])
+	_set_label_text(_release_readiness_label, "Release: %s · v%s · Checks %d/%d pass" % [
+		"ready" if bool(readiness.get("ready", false)) else "blocked",
+		str(readiness.get("version", "")),
+		pass_count,
+		pass_count + fail_count,
+	])
+	_release_readiness_label.tooltip_text = "\n".join(failing) if not failing.is_empty() else "All release readiness checks passed."
+
+
+func _get_release_readiness_cache(force: bool) -> Dictionary:
+	var now: int = Time.get_ticks_msec()
+	if not force and not _release_readiness_cache.is_empty() and now - _last_release_readiness_msec < READINESS_REFRESH_INTERVAL_MSEC:
+		return _release_readiness_cache
+	if _tool_registry == null:
+		return {}
+	var result: String = _tool_registry.call_tool("get_release_readiness", {"include_commands": false})
+	_release_readiness_cache = _parse_json_dict(result)
+	_last_release_readiness_msec = now
+	return _release_readiness_cache
+
+
 func _refresh_update_state() -> void:
 	if _version_label == null or _update_status_label == null:
 		return
@@ -467,9 +599,38 @@ func _refresh_update_state() -> void:
 	var state: Dictionary = _update_checker.get_state()
 	_set_label_text(_version_label, "v%s" % str(state.get("current_version", "0.0.0")))
 	_set_label_text(_update_status_label, str(state.get("status_message", "Updates: Not checked")))
+	_update_status_label.tooltip_text = _build_update_artifacts_tooltip(state)
 	_check_updates_button.disabled = bool(state.get("is_checking", false))
 	_check_updates_button.text = "Checking..." if bool(state.get("is_checking", false)) else "Check Updates"
 	_open_release_button.disabled = bool(state.get("is_checking", false))
+
+
+func _build_update_artifacts_tooltip(state: Dictionary) -> String:
+	var artifacts = state.get("release_artifacts", {})
+	if not (artifacts is Dictionary) or artifacts.is_empty():
+		return "No release artifacts checked yet."
+
+	var lines: Array[String] = [
+		"Expected package: %s" % str(artifacts.get("expected_package", "")),
+		"Verification ready: %s" % str(artifacts.get("verification_ready", false)),
+		"Registry ready: %s" % str(artifacts.get("registry_ready", false)),
+		_artifact_tooltip_line(artifacts, "package", "Package"),
+		_artifact_tooltip_line(artifacts, "manifest", "Manifest"),
+		_artifact_tooltip_line(artifacts, "sha256s", "SHA256SUMS"),
+		_artifact_tooltip_line(artifacts, "server_json", "server.json"),
+	]
+	return "\n".join(lines)
+
+
+func _artifact_tooltip_line(artifacts: Dictionary, key: String, label: String) -> String:
+	var asset = artifacts.get(key, {})
+	if not (asset is Dictionary) or asset.is_empty():
+		return "%s: missing" % label
+	return "%s: %s (%d bytes)" % [
+		label,
+		str(asset.get("name", "")),
+		int(asset.get("size", 0)),
+	]
 
 
 func _refresh_tool_exposure(force: bool) -> void:
@@ -567,6 +728,22 @@ func _set_text_edit_text(text_edit: TextEdit, value: String) -> void:
 func _set_checkbox_pressed(checkbox: CheckBox, pressed: bool) -> void:
 	if checkbox != null and checkbox.button_pressed != pressed:
 		checkbox.set_pressed_no_signal(pressed)
+
+
+func _read_json_file(path: String) -> Dictionary:
+	if not FileAccess.file_exists(path):
+		return {}
+	return _parse_json_dict(FileAccess.get_file_as_string(path))
+
+
+func _parse_json_dict(text: String) -> Dictionary:
+	if text.strip_edges() == "":
+		return {}
+	var json := JSON.new()
+	if json.parse(text) != OK:
+		return {}
+	var parsed = json.data
+	return parsed if parsed is Dictionary else {}
 
 
 func _notification(what: int) -> void:

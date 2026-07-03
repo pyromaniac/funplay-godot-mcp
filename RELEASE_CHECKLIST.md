@@ -13,11 +13,15 @@ Use this checklist before publishing a new open-source release of Funplay MCP fo
 - [ ] `README.md` and `README_CN.md` match the current product behavior
 - [ ] `ASSET_LIBRARY.md` matches the current Godot Asset Library package behavior
 - [ ] `python scripts/validate_repo.py` passes locally
+- [ ] `python scripts/run_godot_smoke.py` passes locally with Godot available on PATH, `GODOT_BIN`, or `--godot`
 - [ ] `python scripts/package_release.py --version <version>` builds release artifacts locally
 
 ## 2. Godot Smoke Test
 
+- [ ] Run `python scripts/run_godot_smoke.py` against the release workspace
 - [ ] Test in a clean Godot `4.2+` project
+- [ ] In Godot GUI, enable the dock, install the runtime bridge, enter Play Mode, then verify `query_runtime_node`, `capture_runtime_view`, `get_runtime_events`, and `exit_play_mode`
+- [ ] Repeat editor-load validation in the matching Godot .NET build when claiming .NET compatibility
 - [ ] Install from `dist/v<version>/Funplay.GodotMcp.v<version>.zip`
 - [ ] Enable the plugin successfully
 - [ ] Start the MCP server successfully

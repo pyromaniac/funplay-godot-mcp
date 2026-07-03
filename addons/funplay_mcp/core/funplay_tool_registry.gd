@@ -22,6 +22,17 @@ func _init(plugin, settings) -> void:
 	_register_tools()
 
 
+func teardown() -> void:
+	if _core_tools != null and _core_tools.has_method("set_tool_registry"):
+		_core_tools.set_tool_registry(null)
+	_core_tools = null
+	_tools.clear()
+	_profiles["core"] = []
+	_profiles["full"] = []
+	_plugin = null
+	_settings = null
+
+
 func list_tools(profile: String) -> Array:
 	var selected_profile: String = profile if profile in _profiles else "core"
 	var tools: Array = []
@@ -491,6 +502,13 @@ func _register_tools() -> void:
 			"topic": {"type": "string", "enum": ["overview", "scene", "runtime", "scripts", "refactor", "ui", "assets", "release"], "default": "overview"},
 		},
 	}, "funplay_help", ["core", "full"])
+	_register_tool("get_dashboard_status", "Return a compact product dashboard for project, server, tools, runtime bridge, release readiness, and workflow coverage.", {
+		"type": "object",
+		"properties": {
+			"include_release": {"type": "boolean", "default": true},
+			"include_workflows": {"type": "boolean", "default": true},
+		},
+	}, "get_dashboard_status", ["core", "full"])
 	_register_tool("get_capability_status", "Return detected project, editor, protocol, undo/redo, and runtime bridge capability gates.", _empty_schema(), "get_capability_status", ["core", "full"])
 	_register_tool("get_editor_protocol_status", "Return Godot editor LSP and debug-adapter settings discovered from EditorSettings.", _empty_schema(), "get_editor_protocol_status", ["core", "full"])
 	_register_tool("get_release_readiness", "Return release, npm wrapper, MCP Registry, Asset Library, and validation readiness checks.", {
@@ -519,6 +537,50 @@ func _register_tools() -> void:
 		},
 	}, "remove_runtime_bridge", ["core", "full"])
 	_register_tool("get_runtime_bridge_status", "Return runtime bridge install status and the latest play-mode heartbeat state.", _empty_schema(), "get_runtime_bridge_status", ["core", "full"])
+	_register_tool("query_runtime_node", "Query a live play-mode node through the runtime bridge command channel.", {
+		"type": "object",
+		"properties": {
+			"node_path": {"type": "string", "default": "current_scene"},
+			"properties": {"type": "array", "items": {"type": "string"}},
+			"include_children": {"type": "boolean", "default": false},
+			"max_depth": {"type": "integer", "default": 2},
+			"max_nodes": {"type": "integer", "default": 80},
+			"timeout_msec": {"type": "integer", "default": 10000},
+		},
+	}, "query_runtime_node", ["core", "full"])
+	_register_tool("capture_runtime_view", "Capture the live game viewport through the runtime bridge.", {
+		"type": "object",
+		"properties": {
+			"save_path": {"type": "string"},
+			"return_data_uri": {"type": "boolean", "default": false},
+			"timeout_msec": {"type": "integer", "default": 10000},
+		},
+	}, "capture_runtime_view", ["core", "full"])
+	_register_tool("send_runtime_input", "Send action, key, mouse button, or mouse drag input inside the running game through the runtime bridge.", {
+		"type": "object",
+		"properties": {
+			"events": {"type": "array"},
+			"type": {"type": "string", "enum": ["action", "key", "mouse_button", "mouse_drag"], "default": "action"},
+			"action": {"type": "string"},
+			"key": {},
+			"physical_key": {},
+			"button": {},
+			"position": {},
+			"from_position": {},
+			"to_position": {},
+			"mode": {"type": "string", "enum": ["press", "release", "tap"], "default": "tap"},
+			"strength": {"type": "number", "default": 1.0},
+			"steps": {"type": "integer", "default": 8},
+			"timeout_msec": {"type": "integer", "default": 10000},
+		},
+	}, "send_runtime_input", ["core", "full"])
+	_register_tool("get_runtime_events", "Return the runtime bridge event ring buffer from the running game.", {
+		"type": "object",
+		"properties": {
+			"timeout_msec": {"type": "integer", "default": 10000},
+			"max_events": {"type": "integer", "default": 100},
+		},
+	}, "get_runtime_events", ["core", "full"])
 	_register_tool("list_workflow_coverage", "Return a compact workflow coverage matrix for high-value Godot MCP workflows.", _empty_schema(), "list_workflow_coverage", ["core", "full"])
 	_register_tool("get_project_skills_status", "Return whether Funplay project skill files have been generated.", _empty_schema(), "get_project_skills_status", ["core", "full"])
 	_register_tool("generate_project_skills", "Generate Funplay project skill files and an optional AGENTS.md bridge for AI clients.", {
@@ -1183,7 +1245,7 @@ func _tool_hidden_reason(language_allowed: bool, disabled: bool) -> String:
 func _infer_tool_group(tool_name: String) -> String:
 	if tool_name in ["execute_code", "capture_editor_view", "log_message", "wait_msec"]:
 		return "execution"
-	if tool_name in ["funplay_help", "list_tool_catalog", "get_capability_status", "get_release_readiness", "list_workflow_coverage"]:
+	if tool_name in ["funplay_help", "list_tool_catalog", "get_dashboard_status", "get_capability_status", "get_release_readiness", "list_workflow_coverage"]:
 		return "guidance"
 	if tool_name in ["map_project", "find_usages", "plan_script_refactor", "apply_script_refactor"]:
 		return "project_map"
@@ -1193,7 +1255,7 @@ func _infer_tool_group(tool_name: String) -> String:
 		return "project"
 	if tool_name in ["list_input_actions", "get_input_action", "add_input_action", "remove_input_action", "add_input_event_to_action", "clear_input_events"]:
 		return "input"
-	if tool_name in ["list_autoloads", "set_autoload", "remove_autoload", "install_runtime_bridge", "remove_runtime_bridge", "get_runtime_bridge_status"]:
+	if tool_name in ["list_autoloads", "set_autoload", "remove_autoload", "install_runtime_bridge", "remove_runtime_bridge", "get_runtime_bridge_status", "query_runtime_node", "capture_runtime_view", "send_runtime_input", "get_runtime_events"]:
 		return "runtime"
 	if tool_name in ["editor_undo", "editor_redo", "get_undo_redo_status"]:
 		return "undo_redo"

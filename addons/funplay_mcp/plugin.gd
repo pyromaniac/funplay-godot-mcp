@@ -50,6 +50,9 @@ func _exit_tree() -> void:
 		_dock.queue_free()
 		_dock = null
 
+	if _tool_registry != null and _tool_registry.has_method("teardown"):
+		_tool_registry.teardown()
+
 	_server = null
 	_prompt_provider = null
 	_resource_provider = null

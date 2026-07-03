@@ -81,7 +81,7 @@ Dock 里也会显示当前插件版本，并提供 **Check Updates** 按钮；�
     "funplay": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "funplay-godot-mcp@0.9.4"],
+      "args": ["-y", "funplay-godot-mcp@0.9.5"],
       "env": {
         "FUNPLAY_GODOT_MCP_URL": "http://127.0.0.1:8765/",
         "FUNPLAY_GODOT_MCP_TOKEN": "<Funplay MCP Dock 中显示/写入的 token>"
@@ -101,7 +101,7 @@ Dock 里也会显示当前插件版本，并提供 **Check Updates** 按钮；�
   "mcpServers": {
     "funplay": {
       "command": "npx",
-      "args": ["-y", "funplay-godot-mcp@0.9.4"],
+      "args": ["-y", "funplay-godot-mcp@0.9.5"],
       "env": {
         "FUNPLAY_GODOT_MCP_URL": "http://127.0.0.1:8765/",
         "FUNPLAY_GODOT_MCP_TOKEN": "<Funplay MCP Dock 中显示/写入的 token>"
@@ -122,7 +122,7 @@ Dock 里也会显示当前插件版本，并提供 **Check Updates** 按钮；�
     "funplay": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "funplay-godot-mcp@0.9.4"],
+      "args": ["-y", "funplay-godot-mcp@0.9.5"],
       "env": {
         "FUNPLAY_GODOT_MCP_URL": "http://127.0.0.1:8765/",
         "FUNPLAY_GODOT_MCP_TOKEN": "<Funplay MCP Dock 中显示/写入的 token>"
@@ -193,7 +193,7 @@ MCP 客户端配置示例：
 - 插件默认使用 `core` MCP 工具暴露配置，减少 AI 客户端的工具噪音；如果你需要完整工具面，可在 Dock 中切换到 `full`。
 - Dock 里提供 Tool Exposure 面板，可以在当前 profile 内逐个开关工具，也可以打开 MCP 调试日志输出和 `execute_code` 安全检查。
 - `execute_code` 默认会拦截常见的进程、文件系统和项目设置写入风险；确认过的调用可以传入 `safety_checks=false` 覆盖。
-- Dock 可以检查 GitHub Releases 中是否有新版本。
+- Dock 可以检查 GitHub Releases 中是否有新版本，并提示 release zip、manifest、SHA256 和 `server.json` 产物是否齐全。
 - 聚焦型 MCP 工具会直接执行，不再提供额外 approval 开关。
 - Dock 内置 Codex、Claude Code、Cursor、VS Code 的配置复制和直接写入能力。
 
@@ -201,10 +201,11 @@ MCP 客户端配置示例：
 
 - **`execute_code` 主工具优先** — 核心体验围绕一个高灵活度 GDScript 执行工具构建，适合复杂编辑器/运行态编排，并默认开启高风险片段安全检查
 - **工具暴露可控** — 可以直接在 Godot Dock 中开关单个工具，不需要改插件代码
+- **Dock Dashboard** — 在 Godot 内直接查看 server 状态、工具暴露、Runtime Bridge heartbeat、发布 readiness 和项目地图动作
 - **Project Skills** — 可生成项目级 AI 使用说明，记录当前 endpoint、工具 profile、项目上下文和推荐工作流
 - **工具目录与帮助** — 可通过 MCP 查询分组工具目录、能力门禁、工作流覆盖矩阵和任务指引
 - **项目地图与模板** — 检查场景、脚本、函数、信号、引用关系、可搜索浏览器图谱和脚本重构 dry-run 计划
-- **Runtime Bridge** — 可选安装轻量 autoload，在 Play Mode 中持续写入运行态 heartbeat 和场景树快照，方便 AI 验证
+- **Runtime Bridge** — 可选安装轻量 autoload，在 Play Mode 中提供 heartbeat、场景树快照、节点查询、运行态截图、输入注入和事件历史，方便 AI 验证
 - **Play Mode 自动化闭环** — 进入运行模式、模拟输入、查看日志、截图、验证行为都能在同一 MCP 会话里完成
 - **内建项目上下文** — 直接提供项目状态、当前场景、选择对象、运行状态、脚本错误、日志和 MCP 交互记录资源
 - **默认聚焦，必要时全量** — 默认 `core` 工具集更利于 AI 选工具，需要时可切到 `full`
@@ -213,8 +214,8 @@ MCP 客户端配置示例：
 
 ## 核心特性
 
-- **124 个内置工具** — 覆盖场景编辑、PackedScene、语言感知脚本工具、项目地图、脚本重构规划、项目设置、资产导入计划、InputMap、autoload、Runtime Bridge、Undo/Redo、工作流指引、文件、Project Skills、运行态控制、UI 控件、动画、相机、性能、Resources、Prompts 与编辑器自动化
-- **Resources 与 Prompts** — 暴露实时项目上下文、JSON/HTML 项目地图、发布 readiness、运行态场景树快照、场景/选择/错误资源、语言感知脚本诊断、适用时的 `.NET` 项目资源、模板资源，以及常见 Godot 工作流的可复用 MCP Prompt
+- **129 个内置工具** — 覆盖场景编辑、PackedScene、语言感知脚本工具、项目地图、脚本重构规划、项目设置、资产导入计划、InputMap、autoload、Runtime Bridge、Undo/Redo、工作流指引、文件、Project Skills、运行态控制、UI 控件、动画、相机、性能、Resources、Prompts 与编辑器自动化
+- **Resources 与 Prompts** — 暴露实时项目上下文、Dashboard 状态、JSON/HTML 项目地图、发布 readiness、运行态场景树快照和事件历史、场景/选择/错误资源、语言感知脚本诊断、适用时的 `.NET` 项目资源、模板资源，以及常见 Godot 工作流的可复用 MCP Prompt
 - **结构化返回** — JSON 工具输出和工具错误都会同步到 MCP `structuredContent`，节点和资源摘要也包含当前会话可用的 `instance_id`
 - **输入模拟 + 视图截图验证** — 在 Play Mode 中模拟 action / 键盘 / 鼠标 / 拖拽，再用编辑器视图截图验证结果
 - **一键客户端配置** — 直接在 Godot Dock 中为 Codex、Claude Code、Cursor、VS Code 生成并写入 MCP 配置
@@ -232,7 +233,7 @@ MCP 客户端配置示例：
 | 额外本地依赖 | `core` 工作流下只需要 Godot Addon 本身 | `core` 工作流下只需要 Unity 包本身 |
 | 主要交互模型 | 以 `execute_code` 为主，再配合少量高频辅助工具 | 以 `execute_code` 为主，再配合少量高频辅助工具 |
 | 默认工具暴露 | 默认 `core` 精简工具集，可切 `full` | 默认 `core` 精简工具集，可切 `full` |
-| 上下文能力 | 项目资源、脚本错误、运行状态、运行态场景树、日志、Prompts、交互历史 | 项目资源、编译错误、运行状态、日志、Prompts、交互历史 |
+| 上下文能力 | 项目资源、脚本错误、运行状态、运行态场景树、运行态事件、日志、Prompts、交互历史 | 项目资源、编译错误、运行状态、日志、Prompts、交互历史 |
 | UI 自动化 | 深度支持 Godot `Control` / `CanvasLayer` 工作流 | 深度支持 Unity Canvas / UI 工作流 |
 | 定位 | 轻量、直接、MIT 协议的 Godot MCP 服务器 | 轻量、直接、MIT 协议的 Unity MCP 服务器 |
 
@@ -240,14 +241,14 @@ MCP 客户端配置示例：
 
 当前开源包有四层高价值能力：
 
-- **Tools** — 共 124 个注册工具，覆盖场景、脚本、项目地图、项目配置、资产导入规划、输入映射、autoload、Runtime Bridge、Undo/Redo、工作流指引、文件、Project Skills、UI、动画、相机、诊断与自动化。脚本相关工具会按检测到的项目语言和 Dock 中的 Tool Exposure 设置过滤。
+- **Tools** — 共 129 个注册工具，覆盖场景、脚本、项目地图、项目配置、资产导入规划、输入映射、autoload、Runtime Bridge、Undo/Redo、工作流指引、文件、Project Skills、UI、动画、相机、诊断与自动化。脚本相关工具会按检测到的项目语言和 Dock 中的 Tool Exposure 设置过滤。
 - **Primary execution** — `execute_code` 用于复杂编辑器/运行态编排，默认带安全检查，并可返回上下文辅助 API、日志和变更追踪 metadata
 - **Prompts** — 包括 `scene_review`、`feature_plan`、`runtime_debug`、`script_patch`、`ui_layout_plan`、`architecture_advice`、`performance_advice`、`network_template`、`template_generate` 等工作流 Prompt
-- **Resources** — 项目上下文、JSON/HTML 项目地图、场景摘要、选择状态、日志、脚本错误、运行状态、运行态场景树、发布 readiness、项目特性、MCP 交互记录、模板目录，以及文件模板资源
+- **Resources** — 项目上下文、Dashboard 状态、JSON/HTML 项目地图、场景摘要、选择状态、日志、脚本错误、运行状态、运行态场景树、运行态事件、发布 readiness、项目特性、MCP 交互记录、模板目录，以及文件模板资源
 
 ## 内置工具
 
-Funplay MCP for Godot 当前提供 **124 个注册工具函数**，覆盖这些工作流分组。实际暴露给 AI 客户端的脚本工具会按检测到的项目语言和逐工具暴露设置过滤：
+Funplay MCP for Godot 当前提供 **129 个注册工具函数**，覆盖这些工作流分组。实际暴露给 AI 客户端的脚本工具会按检测到的项目语言和逐工具暴露设置过滤：
 
 | 分类 | 工具 |
 |------|------|
@@ -257,8 +258,8 @@ Funplay MCP for Godot 当前提供 **124 个注册工具函数**，覆盖这些�
 | **脚本** | `create_script`, `list_scripts`, `edit_script`, `patch_script`, `open_script`, `validate_script`, `get_script_errors`, `request_script_reload`；`.NET` 项目额外暴露 `get_dotnet_project_info` |
 | **项目地图** | `map_project`, `find_usages`, `plan_script_refactor`, `apply_script_refactor` |
 | **项目设置 / 输入 / Autoload** | `list_project_settings`, `get_project_setting`, `set_project_setting`, `list_input_actions`, `get_input_action`, `add_input_action`, `remove_input_action`, `add_input_event_to_action`, `clear_input_events`, `list_autoloads`, `set_autoload`, `remove_autoload` |
-| **指引 / 能力** | `funplay_help`, `list_tool_catalog`, `get_capability_status`, `get_editor_protocol_status`, `get_release_readiness`, `list_workflow_coverage` |
-| **Runtime Bridge / Undo** | `install_runtime_bridge`, `remove_runtime_bridge`, `get_runtime_bridge_status`, `get_undo_redo_status`, `editor_undo`, `editor_redo` |
+| **指引 / 能力** | `funplay_help`, `list_tool_catalog`, `get_dashboard_status`, `get_capability_status`, `get_editor_protocol_status`, `get_release_readiness`, `list_workflow_coverage` |
+| **Runtime Bridge / Undo** | `install_runtime_bridge`, `remove_runtime_bridge`, `get_runtime_bridge_status`, `query_runtime_node`, `capture_runtime_view`, `send_runtime_input`, `get_runtime_events`, `get_undo_redo_status`, `editor_undo`, `editor_redo` |
 | **文件** | `read_file`, `write_file`, `search_files`, `list_files`, `file_exists`, `delete_file`, `move_file`, `copy_file` |
 | **运行 / 输入** | `get_play_state`, `enter_play_mode`, `play_main_scene`, `exit_play_mode`, `simulate_action`, `simulate_key_event`, `simulate_mouse_button`, `simulate_mouse_drag`, `simulate_input_sequence`, `get_time_scale`, `set_time_scale` |
 | **断言 / 诊断** | `assert_node_exists`, `assert_node_property`, `assert_signal_connected`, `wait_msec`, `get_performance_snapshot`, `analyze_scene_complexity`, `get_console_logs`, `log_message` |
@@ -277,6 +278,8 @@ Funplay MCP for Godot 当前提供 **124 个注册工具函数**，覆盖这些�
 - `stdio-wrapper/` — 给无法直接连接 HTTP MCP 的客户端使用的 npm stdio bridge
 - `server.json` — stdio wrapper 的 MCP Registry 元数据
 - `scripts/package_release.py` — release 产物构建与包校验脚本
+- `scripts/run_godot_smoke.py` — 本地 Godot smoke runner，用于验证 Runtime Bridge 命令通道
+- `scripts/godot_runtime_bridge_smoke.gd` — runner 使用的 headless Godot smoke 脚本
 - `ASSET_LIBRARY.md` — Godot Asset Library 打包、提交和更新安全说明
 - `CHANGELOG.md` — 面向用户的变更记录
 - `CONTRIBUTING.md` — 贡献说明
