@@ -45,10 +45,12 @@ const RUNTIME_BRIDGE_COMMAND_PATH = "user://funplay_mcp_runtime_command.json"
 const RUNTIME_BRIDGE_RESPONSE_PATH = "user://funplay_mcp_runtime_response.json"
 const RUNTIME_BRIDGE_FRESH_STATE_MSEC = 3000
 const LANGUAGE_MODE_CACHE_TTL_MSEC = 5000
+const GDSCRIPT_DIAGNOSTIC_CACHE_TTL_MSEC = 5000
 
 var _language_mode_cache: String = ""
 var _language_mode_cache_root: String = ""
 var _language_mode_cache_msec: int = 0
+var _gdscript_diagnostic_cache: Dictionary = {}
 
 class ExecutionContext:
 	extends RefCounted
@@ -2783,12 +2785,147 @@ func validate_gdscript_file(arguments: Dictionary) -> String:
 	script.resource_path = path
 	script.source_code = source
 	var err = script.reload()
-	return _render_variant({
+	var resource_path: String = script.resource_path
+	# Temporary validation scripts must not remain registered in ResourceCache.
+	script.resource_path = ""
+	var diagnostics: Array = []
+	if err != OK and bool(arguments.get("include_diagnostics", true)):
+		diagnostics = _get_gdscript_diagnostics(path)
+	elif err == OK:
+		_gdscript_diagnostic_cache.erase(path)
+
+	var result: Dictionary = {
 		"path": path,
 		"ok": err == OK,
 		"error_code": err,
-		"resource_path": script.resource_path,
-	})
+		"resource_path": resource_path,
+		"diagnostic_count": diagnostics.size(),
+		"diagnostics": diagnostics,
+	}
+	if not diagnostics.is_empty():
+		var first: Dictionary = diagnostics[0]
+		result["message"] = first.get("message", "")
+		result["line"] = first.get("line")
+		result["column"] = first.get("column")
+	return _render_variant(result)
+
+
+func _get_gdscript_diagnostics(path: String) -> Array:
+	var modified_time: int = int(FileAccess.get_modified_time(path))
+	var now: int = Time.get_ticks_msec()
+	var cached = _gdscript_diagnostic_cache.get(path, {})
+	if cached is Dictionary \
+			and int(cached.get("modified_time", -1)) == modified_time \
+			and now - int(cached.get("cached_at", 0)) < GDSCRIPT_DIAGNOSTIC_CACHE_TTL_MSEC:
+		var cached_diagnostics = cached.get("diagnostics", [])
+		if cached_diagnostics is Array:
+			return cached_diagnostics.duplicate(true)
+
+	var diagnostics: Array = _run_godot_gdscript_check(path)
+	_gdscript_diagnostic_cache[path] = {
+		"modified_time": modified_time,
+		"cached_at": now,
+		"diagnostics": diagnostics.duplicate(true),
+	}
+	return diagnostics
+
+
+func _run_godot_gdscript_check(path: String) -> Array:
+	var executable: String = OS.get_executable_path()
+	if executable == "" or not FileAccess.file_exists(executable):
+		return [_build_gdscript_diagnostic(path, null, "Godot executable is unavailable for detailed script diagnostics.", "validation_error")]
+
+	var output: Array = []
+	OS.execute(executable, [
+		"--headless",
+		"--quiet",
+		"--path",
+		ProjectSettings.globalize_path("res://"),
+		"--script",
+		ProjectSettings.globalize_path(path),
+		"--check-only",
+	], output, true)
+
+	var text: String = ""
+	for chunk in output:
+		text += str(chunk)
+	var diagnostics: Array = _parse_godot_gdscript_check_output(text, path)
+	if diagnostics.is_empty():
+		diagnostics.append(_build_gdscript_diagnostic(
+			path,
+			null,
+			"GDScript validation failed, but Godot did not return a source location.",
+			"validation_error"
+		))
+	return diagnostics
+
+
+func _parse_godot_gdscript_check_output(output: String, fallback_path: String) -> Array:
+	var diagnostics: Array = []
+	var pending_message: String = ""
+	var pending_code: String = "parse_error"
+	for raw_line in output.split("\n"):
+		var line: String = str(raw_line).strip_edges()
+		if line.begins_with("SCRIPT ERROR: "):
+			var payload: String = line.trim_prefix("SCRIPT ERROR: ")
+			if payload.begins_with("Parse Error: "):
+				pending_code = "parse_error"
+				pending_message = payload.trim_prefix("Parse Error: ")
+			elif payload.begins_with("Compile Error: "):
+				pending_code = "compile_error"
+				pending_message = payload.trim_prefix("Compile Error: ")
+			else:
+				pending_code = "script_error"
+				pending_message = payload
+			continue
+
+		if pending_message == "" or not line.begins_with("at: "):
+			continue
+		var location_start: int = line.find("(")
+		var location_end: int = line.rfind(")")
+		if location_start == -1 or location_end <= location_start:
+			continue
+		var location: String = line.substr(location_start + 1, location_end - location_start - 1)
+		var separator: int = location.rfind(":")
+		if separator == -1:
+			continue
+		var line_text: String = location.substr(separator + 1)
+		if not line_text.is_valid_int():
+			continue
+		var diagnostic_path: String = location.substr(0, separator)
+		if diagnostic_path == "" or not diagnostic_path.ends_with(".gd"):
+			diagnostic_path = fallback_path
+		diagnostics.append(_build_gdscript_diagnostic(
+			diagnostic_path,
+			int(line_text),
+			pending_message,
+			pending_code
+		))
+		pending_message = ""
+
+	if diagnostics.is_empty() and pending_message != "":
+		diagnostics.append(_build_gdscript_diagnostic(fallback_path, null, pending_message, pending_code))
+	return diagnostics
+
+
+func _build_gdscript_diagnostic(path: String, line, message: String, code: String) -> Dictionary:
+	var diagnostic: Dictionary = {
+		"path": path,
+		"line": line,
+		"column": null,
+		"end_line": line,
+		"end_column": null,
+		"severity": "error",
+		"code": code,
+		"source": "godot-check-only",
+		"message": message,
+	}
+	if line is int and int(line) > 0 and FileAccess.file_exists(path):
+		var source_lines: PackedStringArray = FileAccess.get_file_as_string(path).split("\n")
+		var line_index: int = int(line) - 1
+		if line_index >= 0 and line_index < source_lines.size():
+			diagnostic["snippet"] = source_lines[line_index].strip_edges()
+	return diagnostic
 
 
 func validate_script(arguments: Dictionary) -> String:

@@ -465,7 +465,7 @@ func _register_tools() -> void:
 		},
 		"required": ["path"],
 	}, "validate_script", ["core", "full"])
-	_register_tool("get_script_errors", "Compile-check GDScript files under a path and return files that fail to reload.", {
+	_register_tool("get_script_errors", "Compile-check scripts and return structured diagnostics with file paths, line numbers, source snippets, and full error messages.", {
 		"type": "object",
 		"properties": {
 			"path": {"type": "string", "default": "res://"},

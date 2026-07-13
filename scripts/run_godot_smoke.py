@@ -12,7 +12,10 @@ import sys
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-SMOKE_SCRIPT = ROOT / "scripts" / "godot_runtime_bridge_smoke.gd"
+SMOKE_SCRIPTS = [
+    ROOT / "scripts" / "godot_runtime_bridge_smoke.gd",
+    ROOT / "scripts" / "godot_gdscript_diagnostics_smoke.gd",
+]
 
 
 def existing_candidates(cli_path: str | None) -> list[pathlib.Path]:
@@ -53,16 +56,20 @@ def cleanup_generated_files() -> None:
 
 
 def run_smoke(godot_bin: pathlib.Path) -> int:
-    command = [
-        str(godot_bin),
-        "--headless",
-        "--path",
-        str(ROOT),
-        "--script",
-        str(SMOKE_SCRIPT),
-    ]
-    print("Running:", " ".join(command), flush=True)
-    return subprocess.run(command, cwd=ROOT, check=False).returncode
+    for smoke_script in SMOKE_SCRIPTS:
+        command = [
+            str(godot_bin),
+            "--headless",
+            "--path",
+            str(ROOT),
+            "--script",
+            str(smoke_script),
+        ]
+        print("Running:", " ".join(command), flush=True)
+        code = subprocess.run(command, cwd=ROOT, check=False).returncode
+        if code != 0:
+            return code
+    return 0
 
 
 def main() -> int:
@@ -75,9 +82,10 @@ def main() -> int:
     if not candidates:
         print("No Godot executable found. Pass --godot or set GODOT_BIN.", file=sys.stderr)
         return 2
-    if not SMOKE_SCRIPT.exists():
-        print(f"Missing smoke script: {SMOKE_SCRIPT.relative_to(ROOT)}", file=sys.stderr)
-        return 2
+    for smoke_script in SMOKE_SCRIPTS:
+        if not smoke_script.exists():
+            print(f"Missing smoke script: {smoke_script.relative_to(ROOT)}", file=sys.stderr)
+            return 2
 
     try:
         for candidate in candidates:

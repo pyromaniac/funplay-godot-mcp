@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [0.9.6] - 2026-07-12
+
+### Fixed
+- GDScript validation now returns Godot's full parser or compiler message with the exact file, line number, and source snippet instead of only an unnumbered reload error code.
+
 ## [0.9.5] - 2026-07-03
 
 ### Added
