@@ -44,7 +44,7 @@ def write_editor_configuration(project: pathlib.Path, home: pathlib.Path, port: 
         "[debug_options]\n\n"
         "multiple_instances_enabled=true\n"
         "run_instance_count=2\n"
-        'run_instances_config=Array[Dictionary]([{"arguments":"-- creative","features":"","override_args":true,"override_features":false}, {"arguments":"-- client","features":"","override_args":true,"override_features":false}])\n',
+        'run_instances_config=Array[Dictionary]([{"arguments":"--headless -- creative","features":"","override_args":true,"override_features":false}, {"arguments":"--headless -- client","features":"","override_args":true,"override_features":false}])\n',
         encoding="utf-8",
     )
 
