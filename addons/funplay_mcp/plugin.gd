@@ -7,6 +7,7 @@ const FunplayResourceProvider = preload("res://addons/funplay_mcp/core/funplay_r
 const FunplayPromptProvider = preload("res://addons/funplay_mcp/core/funplay_prompt_provider.gd")
 const FunplayMcpServer = preload("res://addons/funplay_mcp/core/funplay_mcp_server.gd")
 const FunplayClientConfigWriter = preload("res://addons/funplay_mcp/core/funplay_client_config_writer.gd")
+const FunplayPlayModeController = preload("res://addons/funplay_mcp/core/funplay_play_mode_controller.gd")
 const FunplayMcpDock = preload("res://addons/funplay_mcp/ui/funplay_mcp_dock.gd")
 
 var _settings
@@ -16,6 +17,7 @@ var _prompt_provider
 var _server
 var _dock
 var _client_config_writer
+var _play_mode_controller
 
 
 func _enter_tree() -> void:
@@ -23,6 +25,7 @@ func _enter_tree() -> void:
 		return
 
 	_settings = FunplayMcpSettings.new()
+	_play_mode_controller = FunplayPlayModeController.new(self)
 	_tool_registry = FunplayToolRegistry.new(self, _settings)
 	_resource_provider = FunplayResourceProvider.new(self, _settings)
 	_resource_provider.set_tool_registry(_tool_registry)
@@ -44,6 +47,8 @@ func _exit_tree() -> void:
 
 	if _server != null:
 		_server.stop()
+	if _play_mode_controller != null:
+		_play_mode_controller.teardown()
 
 	if _dock != null:
 		remove_control_from_docks(_dock)
@@ -58,12 +63,19 @@ func _exit_tree() -> void:
 	_resource_provider = null
 	_tool_registry = null
 	_client_config_writer = null
+	_play_mode_controller = null
 	_settings = null
 
 
 func _process(_delta: float) -> void:
 	if _server != null:
 		_server.poll()
+	if _play_mode_controller != null:
+		_play_mode_controller.poll()
 
 	if _dock != null:
 		_dock.refresh_live_state()
+
+
+func get_play_mode_controller():
+	return _play_mode_controller

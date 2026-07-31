@@ -3,6 +3,7 @@ extends VBoxContainer
 
 const FunplayProjectSkillManager = preload("res://addons/funplay_mcp/core/funplay_project_skill_manager.gd")
 const FunplayUpdateChecker = preload("res://addons/funplay_mcp/core/funplay_update_checker.gd")
+const FunplayLocalization = preload("res://addons/funplay_mcp/core/funplay_localization.gd")
 
 const REFRESH_INTERVAL_MSEC = 1000
 const READINESS_REFRESH_INTERVAL_MSEC = 5000
@@ -28,6 +29,7 @@ var _status_label: Label
 var _endpoint_label: Label
 var _enable_checkbox: CheckBox
 var _port_spinbox: SpinBox
+var _language_button: OptionButton
 var _profile_button: OptionButton
 var _debug_checkbox: CheckBox
 var _execute_safety_checkbox: CheckBox
@@ -47,6 +49,7 @@ var _release_readiness_cache: Dictionary = {}
 var _last_tool_exposure_signature: String = ""
 var _updating_tool_checks: bool = false
 var _needs_refresh_when_visible: bool = true
+var _selected_client_name: String = "Codex"
 
 
 func setup(server, settings, client_config_writer, tool_registry = null) -> void:
@@ -76,11 +79,8 @@ func refresh_live_state(force: bool = false) -> void:
 	if _status_label == null:
 		return
 
-	var status_text: String = "Stopped"
-	if _server.is_running():
-		status_text = "Attached" if _server.has_method("is_attached_to_existing") and _server.is_attached_to_existing() else "Running"
-	_set_label_text(_status_label, "Status: %s" % status_text)
-	_set_label_text(_endpoint_label, "Endpoint: %s" % (_server.get_endpoint() if _server.is_running() else "http://127.0.0.1:%d/" % _settings.server_port))
+	_set_label_text(_status_label, _t("status_line", [_server_status_text()]))
+	_set_label_text(_endpoint_label, _t("endpoint_line", [_server.get_endpoint() if _server.is_running() else "http://127.0.0.1:%d/" % _settings.server_port]))
 	_set_checkbox_pressed(_enable_checkbox, _settings.server_enabled)
 	if int(_port_spinbox.value) != _settings.server_port:
 		_port_spinbox.set_value_no_signal(_settings.server_port)
@@ -104,9 +104,12 @@ func refresh_live_state(force: bool = false) -> void:
 
 
 func _build_ui() -> void:
+	if _client_button != null and is_instance_valid(_client_button) and _client_button.selected >= 0:
+		_selected_client_name = _client_button.get_item_text(_client_button.selected)
 	for child in get_children():
-		remove_child(child)
-		child.queue_free()
+		if child is Control:
+			remove_child(child)
+			child.queue_free()
 
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -135,6 +138,24 @@ func _build_ui() -> void:
 	_version_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	title_row.add_child(_version_label)
 
+	var language_row = HBoxContainer.new()
+	language_row.add_theme_constant_override("separation", 6)
+	content.add_child(language_row)
+
+	var language_label = Label.new()
+	language_label.text = _t("language")
+	language_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	language_row.add_child(language_label)
+
+	_language_button = OptionButton.new()
+	_language_button.add_item("English")
+	_language_button.set_item_metadata(0, FunplayLocalization.ENGLISH)
+	_language_button.add_item("中文")
+	_language_button.set_item_metadata(1, FunplayLocalization.SIMPLIFIED_CHINESE)
+	_language_button.select(1 if _settings.ui_language == FunplayLocalization.SIMPLIFIED_CHINESE else 0)
+	_language_button.item_selected.connect(_on_language_selected)
+	language_row.add_child(_language_button)
+
 	var update_row = HBoxContainer.new()
 	update_row.add_theme_constant_override("separation", 6)
 	content.add_child(update_row)
@@ -145,17 +166,17 @@ func _build_ui() -> void:
 	update_row.add_child(_update_status_label)
 
 	_check_updates_button = Button.new()
-	_check_updates_button.text = "Check Updates"
+	_check_updates_button.text = _t("check_updates")
 	_check_updates_button.pressed.connect(_check_for_updates)
 	update_row.add_child(_check_updates_button)
 
 	_open_release_button = Button.new()
-	_open_release_button.text = "Open Release"
+	_open_release_button.text = _t("open_release")
 	_open_release_button.pressed.connect(_open_latest_release)
 	update_row.add_child(_open_release_button)
 
 	var dashboard_title = Label.new()
-	dashboard_title.text = "Dashboard"
+	dashboard_title.text = _t("dashboard")
 	dashboard_title.add_theme_font_size_override("font_size", 14)
 	content.add_child(dashboard_title)
 
@@ -172,14 +193,14 @@ func _build_ui() -> void:
 	content.add_child(runtime_actions)
 
 	var install_bridge_button = Button.new()
-	install_bridge_button.text = "Install Bridge"
-	install_bridge_button.tooltip_text = "Install the optional play-mode runtime bridge autoload."
+	install_bridge_button.text = _t("install_bridge")
+	install_bridge_button.tooltip_text = _t("install_bridge_tooltip")
 	install_bridge_button.pressed.connect(_install_runtime_bridge)
 	runtime_actions.add_child(install_bridge_button)
 
 	var remove_bridge_button = Button.new()
-	remove_bridge_button.text = "Remove Bridge"
-	remove_bridge_button.tooltip_text = "Remove the optional play-mode runtime bridge autoload."
+	remove_bridge_button.text = _t("remove_bridge")
+	remove_bridge_button.tooltip_text = _t("remove_bridge_tooltip")
 	remove_bridge_button.pressed.connect(_remove_runtime_bridge)
 	runtime_actions.add_child(remove_bridge_button)
 
@@ -195,12 +216,12 @@ func _build_ui() -> void:
 	content.add_child(_endpoint_label)
 
 	_enable_checkbox = CheckBox.new()
-	_enable_checkbox.text = "Enable MCP Server"
+	_enable_checkbox.text = _t("enable_server")
 	_enable_checkbox.toggled.connect(_on_enable_toggled)
 	content.add_child(_enable_checkbox)
 
 	var port_label = Label.new()
-	port_label.text = "Port"
+	port_label.text = _t("port")
 	content.add_child(port_label)
 
 	_port_spinbox = SpinBox.new()
@@ -211,7 +232,7 @@ func _build_ui() -> void:
 	content.add_child(_port_spinbox)
 
 	var profile_label = Label.new()
-	profile_label.text = "Tool Profile"
+	profile_label.text = _t("tool_profile")
 	content.add_child(profile_label)
 
 	_profile_button = OptionButton.new()
@@ -221,14 +242,14 @@ func _build_ui() -> void:
 	content.add_child(_profile_button)
 
 	_debug_checkbox = CheckBox.new()
-	_debug_checkbox.text = "Debug Logging"
-	_debug_checkbox.tooltip_text = "Print MCP activity to the Godot output panel."
+	_debug_checkbox.text = _t("debug_logging")
+	_debug_checkbox.tooltip_text = _t("debug_logging_tooltip")
 	_debug_checkbox.toggled.connect(_on_debug_logging_toggled)
 	content.add_child(_debug_checkbox)
 
 	_execute_safety_checkbox = CheckBox.new()
-	_execute_safety_checkbox.text = "execute_code Safety Checks"
-	_execute_safety_checkbox.tooltip_text = "Block common dangerous filesystem, process, and project-setting snippets by default. Tool calls can still override with safety_checks=false."
+	_execute_safety_checkbox.text = _t("execute_safety_checks")
+	_execute_safety_checkbox.tooltip_text = _t("execute_safety_tooltip")
 	_execute_safety_checkbox.toggled.connect(_on_execute_safety_toggled)
 	content.add_child(_execute_safety_checkbox)
 
@@ -237,8 +258,8 @@ func _build_ui() -> void:
 	content.add_child(map_row)
 
 	var open_map_button = Button.new()
-	open_map_button.text = "Open Project Map"
-	open_map_button.tooltip_text = "Generate a read-only HTML project visualizer from map_project and open it in the browser."
+	open_map_button.text = _t("open_project_map")
+	open_map_button.tooltip_text = _t("open_project_map_tooltip")
 	open_map_button.pressed.connect(_open_project_map)
 	map_row.add_child(open_map_button)
 
@@ -252,13 +273,13 @@ func _build_ui() -> void:
 	content.add_child(exposure_header)
 
 	_tool_exposure_label = Label.new()
-	_tool_exposure_label.text = "Tool Exposure"
+	_tool_exposure_label.text = _t("tool_exposure")
 	_tool_exposure_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	exposure_header.add_child(_tool_exposure_label)
 
 	var reset_tools_button = Button.new()
-	reset_tools_button.text = "Reset"
-	reset_tools_button.tooltip_text = "Expose every tool allowed by the current profile and project language."
+	reset_tools_button.text = _t("reset")
+	reset_tools_button.tooltip_text = _t("reset_tools_tooltip")
 	reset_tools_button.pressed.connect(_reset_tool_exposure)
 	exposure_header.add_child(reset_tools_button)
 
@@ -273,13 +294,14 @@ func _build_ui() -> void:
 	tool_scroll.add_child(_tool_list)
 
 	var client_label = Label.new()
-	client_label.text = "Client Config Snippet"
+	client_label.text = _t("client_config_snippet")
 	content.add_child(client_label)
 
 	_client_button = OptionButton.new()
-	for client_name in ["Codex", "Claude Code", "Cursor", "VS Code"]:
+	var client_names: Array[String] = ["Codex", "Claude Code", "Cursor", "VS Code"]
+	for client_name in client_names:
 		_client_button.add_item(client_name)
-	_client_button.select(0)
+	_client_button.select(max(0, client_names.find(_selected_client_name)))
 	_client_button.item_selected.connect(_on_client_selected)
 	content.add_child(_client_button)
 
@@ -288,18 +310,18 @@ func _build_ui() -> void:
 	content.add_child(action_row)
 
 	var copy_button = Button.new()
-	copy_button.text = "Copy Snippet"
+	copy_button.text = _t("copy_snippet")
 	copy_button.pressed.connect(_copy_snippet)
 	action_row.add_child(copy_button)
 
 	var configure_button = Button.new()
-	configure_button.text = "Configure"
+	configure_button.text = _t("configure")
 	configure_button.pressed.connect(_configure_client)
 	action_row.add_child(configure_button)
 
 	var configure_skills_button = Button.new()
-	configure_skills_button.text = "Configure + Skills"
-	configure_skills_button.tooltip_text = "Write the selected MCP client config and generate project skill files."
+	configure_skills_button.text = _t("configure_skills")
+	configure_skills_button.tooltip_text = _t("configure_skills_tooltip")
 	configure_skills_button.pressed.connect(_configure_client_with_skills)
 	action_row.add_child(configure_skills_button)
 
@@ -324,7 +346,7 @@ func _build_ui() -> void:
 	content.add_child(_snippet_text)
 
 	var log_label = Label.new()
-	log_label.text = "Recent Activity"
+	log_label.text = _t("recent_activity")
 	content.add_child(log_label)
 
 	_log_text = TextEdit.new()
@@ -350,6 +372,18 @@ func _on_port_changed(value: float) -> void:
 	refresh_live_state(true)
 
 
+func _on_language_selected(index: int) -> void:
+	if _language_button == null or index < 0 or index >= _language_button.item_count:
+		return
+	var language: String = str(_language_button.get_item_metadata(index))
+	if language == _settings.ui_language:
+		return
+	_settings.update_ui_language(language)
+	_last_tool_exposure_signature = ""
+	_build_ui()
+	refresh_live_state(true)
+
+
 func _on_profile_selected(index: int) -> void:
 	var value: String = "core" if index == 0 else "full"
 	_settings.update_tool_profile(value)
@@ -369,19 +403,21 @@ func _on_execute_safety_toggled(pressed: bool) -> void:
 	refresh_live_state(true)
 
 
-func _on_client_selected(_index: int) -> void:
+func _on_client_selected(index: int) -> void:
+	if _client_button != null and index >= 0 and index < _client_button.item_count:
+		_selected_client_name = _client_button.get_item_text(index)
 	refresh_live_state(true)
 
 
 func _copy_snippet() -> void:
 	DisplayServer.clipboard_set(_snippet_text.text)
-	_copy_status_label.text = "Copied to clipboard."
+	_copy_status_label.text = _t("copied_to_clipboard")
 
 
 func _configure_client() -> void:
 	var target: Dictionary = _get_selected_target()
 	var result: Dictionary = _client_config_writer.configure_target(target)
-	_copy_status_label.text = result.get("message", "")
+	_copy_status_label.text = _localized_result(result)
 	refresh_live_state(true)
 
 
@@ -390,8 +426,8 @@ func _configure_client_with_skills() -> void:
 	var config_result: Dictionary = _client_config_writer.configure_target(target)
 	var skill_result: Dictionary = _skill_manager.generate_project_skills(_get_endpoint(), _settings, _tool_registry)
 	var messages: Array[String] = []
-	messages.append(str(config_result.get("message", "")))
-	messages.append(str(skill_result.get("message", "")))
+	messages.append(_localized_result(config_result))
+	messages.append(_localized_result(skill_result))
 	_copy_status_label.text = "\n".join(messages)
 	refresh_live_state(true)
 
@@ -413,23 +449,29 @@ func _open_latest_release() -> void:
 
 func _install_runtime_bridge() -> void:
 	if _tool_registry == null:
-		_runtime_status_label.text = "Runtime: tool registry unavailable."
+		_runtime_status_label.text = _t("runtime_registry_unavailable")
 		return
-	_runtime_status_label.text = _tool_registry.call_tool("install_runtime_bridge", {"save": true})
+	var result: String = _tool_registry.call_tool("install_runtime_bridge", {"save": true})
+	if result.begins_with("Error:"):
+		_runtime_status_label.text = _t("runtime_action_failed", [result.trim_prefix("Error:").strip_edges()])
+		return
 	refresh_live_state(true)
 
 
 func _remove_runtime_bridge() -> void:
 	if _tool_registry == null:
-		_runtime_status_label.text = "Runtime: tool registry unavailable."
+		_runtime_status_label.text = _t("runtime_registry_unavailable")
 		return
-	_runtime_status_label.text = _tool_registry.call_tool("remove_runtime_bridge", {"save": true})
+	var result: String = _tool_registry.call_tool("remove_runtime_bridge", {"save": true})
+	if result.begins_with("Error:"):
+		_runtime_status_label.text = _t("runtime_action_failed", [result.trim_prefix("Error:").strip_edges()])
+		return
 	refresh_live_state(true)
 
 
 func _open_project_map() -> void:
 	if _tool_registry == null:
-		_map_status_label.text = "Project map unavailable."
+		_map_status_label.text = _t("project_map_unavailable")
 		return
 	var html: String = _tool_registry.call_tool("map_project", {
 		"format": "html",
@@ -437,17 +479,17 @@ func _open_project_map() -> void:
 		"max_script_members": 120,
 	})
 	if html.begins_with("Error:"):
-		_map_status_label.text = html
+		_map_status_label.text = _t("project_map_failed", [html.trim_prefix("Error:").strip_edges()])
 		return
 	var output_path: String = "user://funplay_mcp_project_map.html"
 	var file: FileAccess = FileAccess.open(output_path, FileAccess.WRITE)
 	if file == null:
-		_map_status_label.text = "Failed to write project map."
+		_map_status_label.text = _t("project_map_write_failed")
 		return
 	file.store_string(html)
 	var global_path: String = ProjectSettings.globalize_path(output_path)
 	OS.shell_open(global_path)
-	_map_status_label.text = "Opened %s" % global_path
+	_map_status_label.text = _t("project_map_opened", [global_path])
 
 
 func _on_update_state_changed() -> void:
@@ -470,14 +512,14 @@ func _build_client_snippet(client_name: String) -> String:
 func _build_log_text() -> String:
 	var log_entries: Array = _server.get_interaction_log()
 	if log_entries.is_empty():
-		return "No activity yet."
+		return _t("no_activity")
 
 	var lines: Array[String] = []
 	for entry in log_entries:
 		lines.append("[%s] %s (%s)\n%s" % [
 			entry.get("timestamp", ""),
 			entry.get("name", ""),
-			entry.get("status", ""),
+			_localized_activity_status(str(entry.get("status", ""))),
 			entry.get("message", ""),
 		])
 	return "\n\n".join(lines)
@@ -498,12 +540,12 @@ func _refresh_config_status() -> void:
 
 	var target: Dictionary = _get_selected_target()
 	if target.is_empty():
-		_set_label_text(_config_status_label, "Config status: unavailable")
+		_set_label_text(_config_status_label, _t("config_status_unavailable"))
 		_set_label_text(_config_path_label, "")
 		return
 
 	var exists: bool = _client_config_writer.target_exists(target)
-	_set_label_text(_config_status_label, "Config status: Configured" if exists else "Config status: Not configured")
+	_set_label_text(_config_status_label, _t("config_status_configured") if exists else _t("config_status_not_configured"))
 	_set_label_text(_config_path_label, str(target.get("path", "")))
 
 
@@ -513,9 +555,9 @@ func _refresh_skill_status() -> void:
 
 	var status: Dictionary = _skill_manager.get_status()
 	if bool(status.get("skill_exists", false)):
-		_set_label_text(_skill_status_label, "Project skills: Generated at %s" % str(status.get("skill_path", "")))
+		_set_label_text(_skill_status_label, _t("project_skills_generated", [str(status.get("skill_path", ""))]))
 	else:
-		_set_label_text(_skill_status_label, "Project skills: Not generated")
+		_set_label_text(_skill_status_label, _t("project_skills_not_generated"))
 
 
 func _refresh_dashboard_status(force: bool) -> void:
@@ -523,39 +565,38 @@ func _refresh_dashboard_status(force: bool) -> void:
 		return
 
 	var project_name: String = str(ProjectSettings.get_setting("application/config/name", "Godot Project"))
-	var server_status: String = "Stopped"
-	if _server != null and _server.is_running():
-		server_status = "Attached" if _server.has_method("is_attached_to_existing") and _server.is_attached_to_existing() else "Running"
+	var server_status: String = _server_status_text()
 
 	var tool_summary: Dictionary = _tool_registry.get_exposure_summary(_settings.tool_profile) if _tool_registry != null and _tool_registry.has_method("get_exposure_summary") else {}
-	_set_label_text(_dashboard_status_label, "Project: %s\nServer: %s · Profile: %s · Tools: %d/%d exposed" % [
+	_set_label_text(_dashboard_status_label, _t("dashboard_status", [
 		project_name,
 		server_status,
 		str(tool_summary.get("profile", _settings.tool_profile)),
 		int(tool_summary.get("exposed", 0)),
 		int(tool_summary.get("total_in_profile", 0)),
-	])
+	]))
 
 	var runtime_status: Dictionary = _read_json_file(RUNTIME_BRIDGE_STATE_PATH)
 	var runtime_installed: bool = ProjectSettings.has_setting("autoload/%s" % RUNTIME_BRIDGE_AUTOLOAD_NAME)
+	var runtime_installation: String = _t("runtime_installed") if runtime_installed else _t("runtime_not_installed")
 	if runtime_status.is_empty():
-		_set_label_text(_runtime_status_label, "Runtime: bridge %s · heartbeat not seen" % ("installed" if runtime_installed else "not installed"))
+		_set_label_text(_runtime_status_label, _t("runtime_no_heartbeat", [runtime_installation]))
 	else:
 		var current_scene = runtime_status.get("current_scene", {})
 		var scene_label: String = str(current_scene.get("name", "")) if current_scene is Dictionary else ""
 		var events = runtime_status.get("runtime_events", [])
-		_set_label_text(_runtime_status_label, "Runtime: %s · %s · FPS %d · Nodes %d · Events %d%s" % [
-			"installed" if runtime_installed else "not installed",
-			str(runtime_status.get("status", "")),
+		_set_label_text(_runtime_status_label, _t("runtime_status", [
+			runtime_installation,
+			_localized_runtime_status(str(runtime_status.get("status", ""))),
 			int(runtime_status.get("fps", 0)),
 			int(runtime_status.get("node_count", 0)),
 			events.size() if events is Array else 0,
-			" · Scene %s" % scene_label if scene_label != "" else "",
-		])
+			_t("runtime_scene", [scene_label]) if scene_label != "" else "",
+		]))
 
 	var readiness: Dictionary = _get_release_readiness_cache(force)
 	if readiness.is_empty():
-		_set_label_text(_release_readiness_label, "Release: readiness unavailable")
+		_set_label_text(_release_readiness_label, _t("release_unavailable"))
 		_release_readiness_label.tooltip_text = ""
 		return
 	var checks = readiness.get("checks", [])
@@ -571,13 +612,13 @@ func _refresh_dashboard_status(force: bool) -> void:
 			else:
 				fail_count += 1
 				failing.append("%s: %s" % [str(check.get("name", "")), str(check.get("message", ""))])
-	_set_label_text(_release_readiness_label, "Release: %s · v%s · Checks %d/%d pass" % [
-		"ready" if bool(readiness.get("ready", false)) else "blocked",
+	_set_label_text(_release_readiness_label, _t("release_status", [
+		_t("release_ready") if bool(readiness.get("ready", false)) else _t("release_blocked"),
 		str(readiness.get("version", "")),
 		pass_count,
 		pass_count + fail_count,
-	])
-	_release_readiness_label.tooltip_text = "\n".join(failing) if not failing.is_empty() else "All release readiness checks passed."
+	]))
+	_release_readiness_label.tooltip_text = "\n".join(failing) if not failing.is_empty() else _t("release_all_checks_passed")
 
 
 func _get_release_readiness_cache(force: bool) -> Dictionary:
@@ -598,24 +639,24 @@ func _refresh_update_state() -> void:
 
 	var state: Dictionary = _update_checker.get_state()
 	_set_label_text(_version_label, "v%s" % str(state.get("current_version", "0.0.0")))
-	_set_label_text(_update_status_label, str(state.get("status_message", "Updates: Not checked")))
+	_set_label_text(_update_status_label, _build_update_status(state))
 	_update_status_label.tooltip_text = _build_update_artifacts_tooltip(state)
 	_check_updates_button.disabled = bool(state.get("is_checking", false))
-	_check_updates_button.text = "Checking..." if bool(state.get("is_checking", false)) else "Check Updates"
+	_check_updates_button.text = _t("checking") if bool(state.get("is_checking", false)) else _t("check_updates")
 	_open_release_button.disabled = bool(state.get("is_checking", false))
 
 
 func _build_update_artifacts_tooltip(state: Dictionary) -> String:
 	var artifacts = state.get("release_artifacts", {})
 	if not (artifacts is Dictionary) or artifacts.is_empty():
-		return "No release artifacts checked yet."
+		return _t("release_artifacts_not_checked")
 
 	var lines: Array[String] = [
-		"Expected package: %s" % str(artifacts.get("expected_package", "")),
-		"Verification ready: %s" % str(artifacts.get("verification_ready", false)),
-		"Registry ready: %s" % str(artifacts.get("registry_ready", false)),
-		_artifact_tooltip_line(artifacts, "package", "Package"),
-		_artifact_tooltip_line(artifacts, "manifest", "Manifest"),
+		_t("expected_package", [str(artifacts.get("expected_package", ""))]),
+		_t("verification_ready", [_localized_bool(bool(artifacts.get("verification_ready", false)))]),
+		_t("registry_ready", [_localized_bool(bool(artifacts.get("registry_ready", false)))]),
+		_artifact_tooltip_line(artifacts, "package", _t("artifact_package")),
+		_artifact_tooltip_line(artifacts, "manifest", _t("artifact_manifest")),
 		_artifact_tooltip_line(artifacts, "sha256s", "SHA256SUMS"),
 		_artifact_tooltip_line(artifacts, "server_json", "server.json"),
 	]
@@ -625,12 +666,12 @@ func _build_update_artifacts_tooltip(state: Dictionary) -> String:
 func _artifact_tooltip_line(artifacts: Dictionary, key: String, label: String) -> String:
 	var asset = artifacts.get(key, {})
 	if not (asset is Dictionary) or asset.is_empty():
-		return "%s: missing" % label
-	return "%s: %s (%d bytes)" % [
+		return _t("artifact_missing", [label])
+	return _t("artifact_found", [
 		label,
 		str(asset.get("name", "")),
 		int(asset.get("size", 0)),
-	]
+	])
 
 
 func _refresh_tool_exposure(force: bool) -> void:
@@ -640,7 +681,7 @@ func _refresh_tool_exposure(force: bool) -> void:
 	var summary: Dictionary = _tool_registry.get_exposure_summary(_settings.tool_profile)
 	var signature = "%s:%s" % [
 		str(summary.get("profile", "")),
-		str(summary.get("language_mode", "")) + ":" + ",".join(_settings.disabled_tools),
+		str(summary.get("language_mode", "")) + ":" + ",".join(_settings.disabled_tools) + ":" + _settings.ui_language,
 	]
 	if not force and signature == _last_tool_exposure_signature:
 		_update_tool_exposure_label(summary)
@@ -672,11 +713,11 @@ func _refresh_tool_exposure(force: bool) -> void:
 
 		if bool(tool.get("disabled", false)):
 			var badge = Label.new()
-			badge.text = "disabled"
+			badge.text = _t("badge_disabled")
 			row.add_child(badge)
 		elif not bool(tool.get("language_allowed", true)):
 			var language_badge = Label.new()
-			language_badge.text = "language"
+			language_badge.text = _t("badge_language")
 			row.add_child(language_badge)
 	_updating_tool_checks = false
 
@@ -684,10 +725,111 @@ func _refresh_tool_exposure(force: bool) -> void:
 func _update_tool_exposure_label(summary: Dictionary) -> void:
 	if _tool_exposure_label == null:
 		return
-	_set_label_text(_tool_exposure_label, "Tool Exposure: %d/%d exposed" % [
+	_set_label_text(_tool_exposure_label, _t("tool_exposure_summary", [
 		int(summary.get("exposed", 0)),
 		int(summary.get("total_in_profile", 0)),
-	])
+	]))
+
+
+func _t(key: String, values: Array = []) -> String:
+	var language: String = _settings.ui_language if _settings != null else FunplayLocalization.ENGLISH
+	return FunplayLocalization.translate(key, language, values)
+
+
+func _server_status_text() -> String:
+	if _server == null or not _server.is_running():
+		return _t("status_stopped")
+	if _server.has_method("is_attached_to_existing") and _server.is_attached_to_existing():
+		return _t("status_attached")
+	return _t("status_running")
+
+
+func _localized_runtime_status(value: String) -> String:
+	match value.strip_edges().to_lower():
+		"ready":
+			return _t("status_ready")
+		"running":
+			return _t("status_running")
+		"command":
+			return _t("status_command")
+		"exit":
+			return _t("status_exit")
+		"":
+			return _t("status_unknown")
+		_:
+			return value
+
+
+func _localized_activity_status(value: String) -> String:
+	match value.strip_edges().to_lower():
+		"success":
+			return _t("activity_success")
+		"error":
+			return _t("activity_error")
+		"warning":
+			return _t("activity_warning")
+		_:
+			return value
+
+
+func _localized_bool(value: bool) -> String:
+	return _t("yes") if value else _t("no")
+
+
+func _localized_result(result: Dictionary) -> String:
+	var code: String = str(result.get("code", ""))
+	match code:
+		"config_missing_path", "skills_generated":
+			return _t(code)
+		"config_directory_failed", "config_json_root_invalid", "config_write_failed", "skill_directory_failed", "skill_write_failed", "skill_manifest_failed", "skill_agents_bridge_failed":
+			return _t(code, [str(result.get("path", ""))])
+		"config_json_invalid":
+			return _t(code, [
+				str(result.get("path", "")),
+				int(result.get("line", 0)),
+				str(result.get("detail", "")),
+			])
+		"config_written":
+			return _t(code, [str(result.get("path", ""))])
+		_:
+			return str(result.get("message", ""))
+
+
+func _build_update_status(state: Dictionary) -> String:
+	var code: String = str(state.get("status_code", "not_checked"))
+	var status: String
+	match code:
+		"checking":
+			status = _t("updates_checking")
+		"start_failed":
+			status = _t("updates_start_failed", [str(state.get("status_detail", ""))])
+		"request_failed":
+			status = _t("updates_request_failed", [str(state.get("status_detail", ""))])
+		"http_error":
+			status = _t("updates_http_error", [int(state.get("status_detail", 0))])
+		"invalid_response":
+			status = _t("updates_invalid_response")
+		"invalid_version":
+			status = _t("updates_invalid_version")
+		"update_available":
+			status = _t("updates_available", [str(state.get("latest_version", "0.0.0"))])
+		"up_to_date":
+			status = _t("updates_up_to_date", [str(state.get("current_version", "0.0.0"))])
+		"local_newer":
+			status = _t("updates_local_newer", [
+				str(state.get("current_version", "0.0.0")),
+				str(state.get("latest_version", "0.0.0")),
+			])
+		"not_checked":
+			status = _t("updates_not_checked")
+		_:
+			status = str(state.get("status_message", _t("updates_not_checked")))
+
+	if code in ["update_available", "up_to_date", "local_newer"]:
+		var artifacts = state.get("release_artifacts", {})
+		var verification_ready: bool = artifacts is Dictionary and bool(artifacts.get("verification_ready", false))
+		status += " · " + _t("updates_checksums_found" if verification_ready else "updates_checksums_missing")
+	return status
 
 
 func _get_endpoint() -> String:

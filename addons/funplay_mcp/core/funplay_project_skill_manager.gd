@@ -25,6 +25,8 @@ func generate_project_skills(endpoint: String, settings, tool_registry = null, i
 	if ensure_err != OK:
 		return {
 			"ok": false,
+			"code": "skill_directory_failed",
+			"path": SKILL_DIR,
 			"message": "Failed to create project skills directory: %s" % SKILL_DIR,
 			"error": ensure_err,
 		}
@@ -34,6 +36,8 @@ func generate_project_skills(endpoint: String, settings, tool_registry = null, i
 	if skill_err != OK:
 		return {
 			"ok": false,
+			"code": "skill_write_failed",
+			"path": PROJECT_SKILL_PATH,
 			"message": "Failed to write project skill: %s" % PROJECT_SKILL_PATH,
 			"error": skill_err,
 		}
@@ -42,6 +46,8 @@ func generate_project_skills(endpoint: String, settings, tool_registry = null, i
 	if manifest_err != OK:
 		return {
 			"ok": false,
+			"code": "skill_manifest_failed",
+			"path": MANIFEST_PATH,
 			"message": "Failed to write project skill manifest: %s" % MANIFEST_PATH,
 			"error": manifest_err,
 		}
@@ -52,6 +58,8 @@ func generate_project_skills(endpoint: String, settings, tool_registry = null, i
 		if bridge_err != OK:
 			return {
 				"ok": false,
+				"code": "skill_agents_bridge_failed",
+				"path": AGENTS_PATH,
 				"message": "Generated project skill, but failed to update %s." % AGENTS_PATH,
 				"error": bridge_err,
 				"paths": touched_paths,
@@ -60,6 +68,7 @@ func generate_project_skills(endpoint: String, settings, tool_registry = null, i
 
 	return {
 		"ok": true,
+		"code": "skills_generated",
 		"message": "Project skills generated.",
 		"paths": touched_paths,
 	}

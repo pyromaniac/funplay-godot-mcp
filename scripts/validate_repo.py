@@ -16,6 +16,7 @@ SERVER = ROOT / "addons" / "funplay_mcp" / "core" / "funplay_mcp_server.gd"
 REQUEST_HANDLER = ROOT / "addons" / "funplay_mcp" / "core" / "funplay_mcp_request_handler.gd"
 TOOL_REGISTRY = ROOT / "addons" / "funplay_mcp" / "core" / "funplay_tool_registry.gd"
 CORE_TOOLS = ROOT / "addons" / "funplay_mcp" / "core" / "funplay_core_tools.gd"
+CLIENT_CONFIG_WRITER = ROOT / "addons" / "funplay_mcp" / "core" / "funplay_client_config_writer.gd"
 SERVER_JSON = ROOT / "server.json"
 WRAPPER_PACKAGE_JSON = ROOT / "stdio-wrapper" / "package.json"
 WRAPPER_BIN = ROOT / "stdio-wrapper" / "bin" / "funplay-godot-mcp.js"
@@ -36,13 +37,21 @@ def add_required_file_errors(errors: list[str]) -> None:
         ROOT / "ASSET_LIBRARY.md",
         PLUGIN_CFG,
         ROOT / "addons" / "funplay_mcp" / "plugin.gd",
+        ROOT / "addons" / "funplay_mcp" / "core" / "funplay_localization.gd",
         ROOT / "addons" / "funplay_mcp" / "core" / "funplay_project_skill_manager.gd",
+        ROOT / "addons" / "funplay_mcp" / "core" / "funplay_play_mode_controller.gd",
         ROOT / "addons" / "funplay_mcp" / "core" / "funplay_update_checker.gd",
         ROOT / "addons" / "funplay_mcp" / "runtime" / "funplay_mcp_runtime_bridge.gd",
         ROOT / "scripts" / "package_release.py",
         ROOT / "scripts" / "run_godot_smoke.py",
+        ROOT / "scripts" / "run_play_mode_integration.py",
+        ROOT / "scripts" / "godot_localization_smoke.gd",
+        ROOT / "scripts" / "godot_play_mode_controller_smoke.gd",
         ROOT / "scripts" / "godot_runtime_bridge_smoke.gd",
         ROOT / "scripts" / "godot_gdscript_diagnostics_smoke.gd",
+        ROOT / "tests" / "integration" / "play_mode" / "project.godot",
+        ROOT / "tests" / "integration" / "play_mode" / "main.tscn",
+        ROOT / "tests" / "integration" / "play_mode" / "main.gd",
         ROOT / "tests" / "fixtures" / "gdscript_diagnostics" / ".gdignore",
         ROOT / "tests" / "fixtures" / "gdscript_diagnostics" / "invalid_too_many_args.gd",
         ROOT / ".github" / "workflows" / "release.yml",
@@ -162,6 +171,35 @@ def add_registry_metadata_errors(errors: list[str], server_version: str) -> None
     bin_map = wrapper_data.get("bin", {})
     if not isinstance(bin_map, dict) or bin_map.get("funplay-godot-mcp") != "bin/funplay-godot-mcp.js":
         errors.append("stdio-wrapper package bin should expose funplay-godot-mcp")
+
+    wrapper_bin_text = read_text(WRAPPER_BIN)
+    wrapper_version_match = re.search(r'const VERSION\s*=\s*"([^"]+)"', wrapper_bin_text)
+    if not wrapper_version_match:
+        errors.append("stdio wrapper CLI is missing its VERSION constant")
+    elif server_version and wrapper_version_match.group(1) != server_version:
+        errors.append(
+            f"stdio wrapper CLI version {wrapper_version_match.group(1)} does not match {server_version}"
+        )
+
+    if CLIENT_CONFIG_WRITER.exists():
+        writer_text = read_text(CLIENT_CONFIG_WRITER)
+        package_match = re.search(r'WRAPPER_PACKAGE\s*=\s*"funplay-godot-mcp@([^"]+)"', writer_text)
+        if not package_match:
+            errors.append("client config writer is missing a pinned funplay-godot-mcp wrapper version")
+        elif server_version and package_match.group(1) != server_version:
+            errors.append(
+                f"client config wrapper version {package_match.group(1)} does not match {server_version}"
+            )
+
+    for readme_name in ("README.md", "README_CN.md"):
+        readme_path = ROOT / readme_name
+        if not readme_path.exists():
+            continue
+        documented_versions = set(re.findall(r'funplay-godot-mcp@(\d+\.\d+\.\d+)', read_text(readme_path)))
+        if documented_versions and documented_versions != {server_version}:
+            errors.append(
+                f"{readme_name} wrapper versions {sorted(documented_versions)} do not match {server_version}"
+            )
 
 
 def add_protocol_errors(errors: list[str]) -> None:

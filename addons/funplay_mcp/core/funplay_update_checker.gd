@@ -15,6 +15,8 @@ var _latest_release_url: String = DEFAULT_RELEASES_URL
 var _latest_published_at: String = ""
 var _release_artifacts: Dictionary = {}
 var _status_message: String = "Updates: Not checked"
+var _status_code: String = "not_checked"
+var _status_detail: String = ""
 var _is_checking: bool = false
 var _has_update: bool = false
 var _last_checked_at: String = ""
@@ -53,6 +55,8 @@ func get_state() -> Dictionary:
 		"latest_published_at": _latest_published_at,
 		"release_artifacts": _release_artifacts,
 		"status_message": _status_message,
+		"status_code": _status_code,
+		"status_detail": _status_detail,
 		"is_checking": _is_checking,
 		"has_update": _has_update,
 		"last_checked_at": _last_checked_at,
@@ -61,11 +65,13 @@ func get_state() -> Dictionary:
 
 func check_for_updates() -> Dictionary:
 	if _request == null:
-		return {"ok": false, "message": "Update checker is not initialized."}
+		return {"ok": false, "code": "not_initialized", "message": "Update checker is not initialized."}
 	if _is_checking:
-		return {"ok": true, "message": "Update check is already running."}
+		return {"ok": true, "code": "already_running", "message": "Update check is already running."}
 
 	_is_checking = true
+	_status_code = "checking"
+	_status_detail = ""
 	_status_message = "Updates: Checking GitHub..."
 	state_changed.emit()
 
@@ -76,11 +82,13 @@ func check_for_updates() -> Dictionary:
 	var err: int = _request.request(LATEST_RELEASE_API_URL, headers, HTTPClient.METHOD_GET)
 	if err != OK:
 		_is_checking = false
+		_status_code = "start_failed"
+		_status_detail = error_string(err)
 		_status_message = "Updates: Failed to start check (%s)" % error_string(err)
 		state_changed.emit()
-		return {"ok": false, "message": _status_message}
+		return {"ok": false, "code": _status_code, "message": _status_message}
 
-	return {"ok": true, "message": _status_message}
+	return {"ok": true, "code": _status_code, "message": _status_message}
 
 
 func open_latest_release() -> void:
@@ -93,11 +101,15 @@ func _on_request_completed(result: int, response_code: int, _headers: PackedStri
 	_last_checked_at = Time.get_datetime_string_from_system(true, true)
 
 	if result != HTTPRequest.RESULT_SUCCESS:
+		_status_code = "request_failed"
+		_status_detail = str(result)
 		_status_message = "Updates: Check failed (%s)" % result
 		state_changed.emit()
 		return
 
 	if response_code < 200 or response_code >= 300:
+		_status_code = "http_error"
+		_status_detail = str(response_code)
 		_status_message = "Updates: GitHub returned HTTP %d" % response_code
 		state_changed.emit()
 		return
@@ -105,6 +117,8 @@ func _on_request_completed(result: int, response_code: int, _headers: PackedStri
 	var text: String = body.get_string_from_utf8()
 	var parsed = JSON.parse_string(text)
 	if not (parsed is Dictionary):
+		_status_code = "invalid_response"
+		_status_detail = ""
 		_status_message = "Updates: Invalid GitHub response"
 		state_changed.emit()
 		return
@@ -115,17 +129,22 @@ func _on_request_completed(result: int, response_code: int, _headers: PackedStri
 	_release_artifacts = _summarize_release_artifacts(parsed.get("assets", []), _latest_version)
 
 	if _latest_version == DEFAULT_VERSION:
+		_status_code = "invalid_version"
 		_status_message = "Updates: Latest release has no valid version"
 		_has_update = false
 	elif _compare_versions(_latest_version, _current_version) > 0:
 		_has_update = true
+		_status_code = "update_available"
 		_status_message = "Updates: v%s available" % _latest_version
 	elif _compare_versions(_latest_version, _current_version) == 0:
 		_has_update = false
+		_status_code = "up_to_date"
 		_status_message = "Updates: Up to date (v%s)" % _current_version
 	else:
 		_has_update = false
+		_status_code = "local_newer"
 		_status_message = "Updates: Local v%s is newer than latest v%s" % [_current_version, _latest_version]
+	_status_detail = ""
 
 	if _latest_version != DEFAULT_VERSION:
 		if bool(_release_artifacts.get("verification_ready", false)):

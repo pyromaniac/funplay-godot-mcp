@@ -22,3 +22,27 @@ jobs:
 
       - name: Validate repository
         run: python scripts/validate_repo.py
+
+  godot-play-mode:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Setup Godot 4.6.3
+        uses: chickensoft-games/setup-godot@f166999204a4f2722c6fe042fbaa3b3ea0d9c789 # v2.4.1
+        with:
+          version: 4.6.3
+          use-dotnet: false
+
+      - name: Run Godot smoke tests
+        run: python scripts/run_godot_smoke.py --godot "$(command -v godot)"
+
+      - name: Run real multi-instance MCP integration
+        run: python scripts/run_play_mode_integration.py --godot "$(command -v godot)"

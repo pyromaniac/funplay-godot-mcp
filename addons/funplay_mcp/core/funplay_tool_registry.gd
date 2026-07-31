@@ -390,10 +390,18 @@ func _register_tools() -> void:
 		"properties": {
 			"mode": {"type": "string", "enum": ["current", "main", "custom"], "default": "current"},
 			"scene_path": {"type": "string"},
+			"restart_if_running": {"type": "boolean", "default": false},
+			"allow_multiple_instances": {"type": "boolean", "default": false},
 		},
 	}, "enter_play_mode", ["core", "full"])
-	_register_tool("play_main_scene", "Play the project’s configured main scene.", _empty_schema(), "play_main_scene", ["core", "full"])
-	_register_tool("exit_play_mode", "Stop the scene currently running in the editor.", _empty_schema(), "exit_play_mode", ["core", "full"])
+	_register_tool("play_main_scene", "Queue the project's configured main scene after the MCP response is sent. Multiple-instance runs require explicit confirmation.", {
+		"type": "object",
+		"properties": {
+			"restart_if_running": {"type": "boolean", "default": false},
+			"allow_multiple_instances": {"type": "boolean", "default": false},
+		},
+	}, "play_main_scene", ["core", "full"])
+	_register_tool("exit_play_mode", "Queue a stop request after the MCP response is sent and report the confirmed transition through get_play_state.", _empty_schema(), "exit_play_mode", ["core", "full"])
 	_register_tool("simulate_action", "Simulate a Godot input action press, release, or tap. Most useful during play mode.", {
 		"type": "object",
 		"properties": {

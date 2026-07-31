@@ -61,6 +61,7 @@ Funplay MCP for Godot 是一个采用 MIT 协议的 Godot 编辑器 MCP 服务�
 本地 MCP POST 请求默认需要 `user://funplay_mcp_settings.cfg` 中保存的项目 auth token；Dock 生成客户端配置时会自动写入这个 token。
 已授权客户端可以运行包括 `execute_code` 在内的高权限编辑器工具；建议只在连接可信本地客户端时启用服务器，并默认保持安全检查开启，除非你明确需要手动覆盖。
 Dock 里也会显示当前插件版本，并提供 **Check Updates** 按钮；当 GitHub Release 有新版本时，可以直接打开发布页。
+通过 Dock 顶部的 **界面语言** 选项可以随时切换英文和简体中文；选择会保存到 `user://funplay_mcp_settings.cfg`，下次打开项目时自动恢复。
 
 ### 3. 配置 AI 客户端
 
@@ -81,7 +82,7 @@ Dock 里也会显示当前插件版本，并提供 **Check Updates** 按钮；�
     "funplay": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "funplay-godot-mcp@0.9.6"],
+      "args": ["-y", "funplay-godot-mcp@0.10.0"],
       "env": {
         "FUNPLAY_GODOT_MCP_URL": "http://127.0.0.1:8765/",
         "FUNPLAY_GODOT_MCP_TOKEN": "<Funplay MCP Dock 中显示/写入的 token>"
@@ -101,7 +102,7 @@ Dock 里也会显示当前插件版本，并提供 **Check Updates** 按钮；�
   "mcpServers": {
     "funplay": {
       "command": "npx",
-      "args": ["-y", "funplay-godot-mcp@0.9.6"],
+      "args": ["-y", "funplay-godot-mcp@0.10.0"],
       "env": {
         "FUNPLAY_GODOT_MCP_URL": "http://127.0.0.1:8765/",
         "FUNPLAY_GODOT_MCP_TOKEN": "<Funplay MCP Dock 中显示/写入的 token>"
@@ -122,7 +123,7 @@ Dock 里也会显示当前插件版本，并提供 **Check Updates** 按钮；�
     "funplay": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "funplay-godot-mcp@0.9.6"],
+      "args": ["-y", "funplay-godot-mcp@0.10.0"],
       "env": {
         "FUNPLAY_GODOT_MCP_URL": "http://127.0.0.1:8765/",
         "FUNPLAY_GODOT_MCP_TOKEN": "<Funplay MCP Dock 中显示/写入的 token>"
@@ -190,9 +191,11 @@ MCP 客户端配置示例：
 - 这是一个 **仅限 Editor** 的插件，不会向最终导出游戏添加运行时代码。
 - MCP Server 默认从 `http://127.0.0.1:8765/` 启动；如果同一项目已经占用该端口，Dock 会直接附着到现有服务，否则会自动切换到其他可用本地端口。
 - 本地 MCP Server 配置保存在 `user://funplay_mcp_settings.cfg`。
+- 语言切换只作用于 Dock 界面；为保证客户端兼容性，MCP 工具名、协议字段和生成的客户端配置标识仍保持稳定的英文形式。
 - 插件默认使用 `core` MCP 工具暴露配置，减少 AI 客户端的工具噪音；如果你需要完整工具面，可在 Dock 中切换到 `full`。
 - Dock 里提供 Tool Exposure 面板，可以在当前 profile 内逐个开关工具，也可以打开 MCP 调试日志输出和 `execute_code` 安全检查。
 - `execute_code` 默认会拦截常见的进程、文件系统和项目设置写入风险；确认过的调用可以传入 `safety_checks=false` 覆盖。
+- Play Mode 请求会在 MCP 响应写回后再执行，重复调用保持幂等。项目配置了多个运行实例时必须显式传入 `allow_multiple_instances=true`；只有确实需要重启时才传 `restart_if_running=true`，最终状态通过 `get_play_state` 确认。
 - Dock 可以检查 GitHub Releases 中是否有新版本，并提示 release zip、manifest、SHA256 和 `server.json` 产物是否齐全。
 - 聚焦型 MCP 工具会直接执行，不再提供额外 approval 开关。
 - Dock 内置 Codex、Claude Code、Cursor、VS Code 的配置复制和直接写入能力。
@@ -202,11 +205,12 @@ MCP 客户端配置示例：
 - **`execute_code` 主工具优先** — 核心体验围绕一个高灵活度 GDScript 执行工具构建，适合复杂编辑器/运行态编排，并默认开启高风险片段安全检查
 - **工具暴露可控** — 可以直接在 Godot Dock 中开关单个工具，不需要改插件代码
 - **Dock Dashboard** — 在 Godot 内直接查看 server 状态、工具暴露、Runtime Bridge heartbeat、发布 readiness 和项目地图动作
+- **中英文 Dock 界面** — Dock 控件、提示和运行状态支持英文与简体中文切换，并按项目持久化语言偏好
 - **Project Skills** — 可生成项目级 AI 使用说明，记录当前 endpoint、工具 profile、项目上下文和推荐工作流
 - **工具目录与帮助** — 可通过 MCP 查询分组工具目录、能力门禁、工作流覆盖矩阵和任务指引
 - **项目地图与模板** — 检查场景、脚本、函数、信号、引用关系、可搜索浏览器图谱和脚本重构 dry-run 计划
 - **Runtime Bridge** — 可选安装轻量 autoload，在 Play Mode 中提供 heartbeat、场景树快照、节点查询、运行态截图、输入注入和事件历史，方便 AI 验证
-- **Play Mode 自动化闭环** — 进入运行模式、模拟输入、查看日志、截图、验证行为都能在同一 MCP 会话里完成
+- **安全的 Play Mode 自动化闭环** — 启停请求排队并确认、重复调用幂等、多实例显式确认，再配合输入模拟、日志和截图在同一 MCP 会话里完成验证
 - **内建项目上下文** — 直接提供项目状态、当前场景、选择对象、运行状态、脚本错误、日志和 MCP 交互记录资源
 - **默认聚焦，必要时全量** — 默认 `core` 工具集更利于 AI 选工具，需要时可切到 `full`
 - **单 Godot Addon 落地** — 不需要额外 approval UI，也不依赖单独的 Python 守护进程

@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-07-30
+
+### Added
+- Added state-machine and real-editor HTTP integration tests that launch and stop two Godot instances with distinct per-instance arguments.
+- Added a persistent English / Simplified Chinese language selector for the Funplay MCP Dock, including localized controls, status text, tooltips, update checks, and configuration results.
+- Added localization catalog, settings persistence, and live Dock switching smoke coverage for both languages.
+
+### Fixed
+- Deferred play-mode start and stop operations until after MCP responses are written, preventing multi-instance editor re-entry from producing empty responses and retry-driven relaunch loops.
+- Made play-mode calls idempotent, added transition confirmation and timeouts to `get_play_state`, and required explicit `allow_multiple_instances=true` confirmation before launching more than one configured instance.
+- Synchronized the generated client configuration and npm wrapper CLI version with the release version.
+
 ## [0.9.6] - 2026-07-12
 
 ### Fixed

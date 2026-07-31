@@ -14,11 +14,13 @@ Use this checklist before publishing a new open-source release of Funplay MCP fo
 - [ ] `ASSET_LIBRARY.md` matches the current Godot Asset Library package behavior
 - [ ] `python scripts/validate_repo.py` passes locally
 - [ ] `python scripts/run_godot_smoke.py` passes locally with Godot available on PATH, `GODOT_BIN`, or `--godot`
+- [ ] `python scripts/run_play_mode_integration.py --godot <path-to-godot>` passes against both standard and .NET builds when play-mode control changed
 - [ ] `python scripts/package_release.py --version <version>` builds release artifacts locally
 
 ## 2. Godot Smoke Test
 
 - [ ] Run `python scripts/run_godot_smoke.py` against the release workspace
+- [ ] Run `python scripts/run_play_mode_integration.py --godot <path-to-godot>` and verify the two configured instances start once, keep their per-instance arguments, and both stop
 - [ ] Test in a clean Godot `4.2+` project
 - [ ] In Godot GUI, enable the dock, install the runtime bridge, enter Play Mode, then verify `query_runtime_node`, `capture_runtime_view`, `get_runtime_events`, and `exit_play_mode`
 - [ ] Repeat editor-load validation in the matching Godot .NET build when claiming .NET compatibility
@@ -28,6 +30,7 @@ Use this checklist before publishing a new open-source release of Funplay MCP fo
 - [ ] Confirm the configured local endpoint is reachable from an MCP client
 - [ ] If port `8765` is occupied, verify the server picks a free port and writes it to `user://funplay_mcp_settings.cfg`
 - [ ] Click `Check Updates` in the dock and verify it either reports up to date or opens the GitHub Release page
+- [ ] Switch the Dock between English and Simplified Chinese, verify dynamic status text changes immediately, then reopen the project and confirm the selection persists
 - [ ] Run a read-only tool such as `get_scene_info`
 - [ ] Run a scene-changing tool such as `create_node`
 - [ ] Verify interaction logs appear in the `Funplay MCP` dock

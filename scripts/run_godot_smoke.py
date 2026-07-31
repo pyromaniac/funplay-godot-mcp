@@ -13,6 +13,8 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SMOKE_SCRIPTS = [
+    ROOT / "scripts" / "godot_localization_smoke.gd",
+    ROOT / "scripts" / "godot_play_mode_controller_smoke.gd",
     ROOT / "scripts" / "godot_runtime_bridge_smoke.gd",
     ROOT / "scripts" / "godot_gdscript_diagnostics_smoke.gd",
 ]

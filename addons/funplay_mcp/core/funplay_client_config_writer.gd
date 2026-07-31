@@ -1,7 +1,7 @@
 @tool
 extends RefCounted
 
-const WRAPPER_PACKAGE = "funplay-godot-mcp@0.9.4"
+const WRAPPER_PACKAGE = "funplay-godot-mcp@0.10.0"
 
 
 func list_targets(endpoint: String, auth_token: String = "") -> Array:
@@ -51,11 +51,17 @@ func list_targets(endpoint: String, auth_token: String = "") -> Array:
 func configure_target(target: Dictionary) -> Dictionary:
 	var path = str(target.get("path", ""))
 	if path == "":
-		return {"ok": false, "message": "Missing config path."}
+		return {"ok": false, "code": "config_missing_path", "message": "Missing config path."}
 
 	var ensure_err = DirAccess.make_dir_recursive_absolute(path.get_base_dir())
 	if ensure_err != OK:
-		return {"ok": false, "message": "Failed to create config directory: %s" % path.get_base_dir()}
+		return {
+			"ok": false,
+			"code": "config_directory_failed",
+			"path": path.get_base_dir(),
+			"error": ensure_err,
+			"message": "Failed to create config directory: %s" % path.get_base_dir(),
+		}
 
 	var target_type = str(target.get("type", "json"))
 	if target_type == "toml":
@@ -98,6 +104,10 @@ func _configure_json_target(target: Dictionary) -> Dictionary:
 			if parse_err != OK:
 				return {
 					"ok": false,
+					"code": "config_json_invalid",
+					"path": path,
+					"line": parser.get_error_line(),
+					"detail": parser.get_error_message(),
 					"message": "Config JSON is invalid and was not modified: %s (line %d: %s)" % [
 						path,
 						parser.get_error_line(),
@@ -107,6 +117,8 @@ func _configure_json_target(target: Dictionary) -> Dictionary:
 			if not (parser.data is Dictionary):
 				return {
 					"ok": false,
+					"code": "config_json_root_invalid",
+					"path": path,
 					"message": "Config JSON root must be an object and was not modified: %s" % path,
 				}
 			root = parser.data
@@ -119,9 +131,9 @@ func _configure_json_target(target: Dictionary) -> Dictionary:
 
 	var file = FileAccess.open(path, FileAccess.WRITE)
 	if file == null:
-		return {"ok": false, "message": "Failed to open config for writing: %s" % path}
+		return {"ok": false, "code": "config_write_failed", "path": path, "message": "Failed to open config for writing: %s" % path}
 	file.store_string(JSON.stringify(root, "\t") + "\n")
-	return {"ok": true, "message": "Configuration written to %s" % path}
+	return {"ok": true, "code": "config_written", "path": path, "message": "Configuration written to %s" % path}
 
 
 func _configure_toml_target(target: Dictionary) -> Dictionary:
@@ -145,9 +157,9 @@ func _configure_toml_target(target: Dictionary) -> Dictionary:
 
 	var file = FileAccess.open(path, FileAccess.WRITE)
 	if file == null:
-		return {"ok": false, "message": "Failed to open config for writing: %s" % path}
+		return {"ok": false, "code": "config_write_failed", "path": path, "message": "Failed to open config for writing: %s" % path}
 	file.store_string(content)
-	return {"ok": true, "message": "Configuration written to %s" % path}
+	return {"ok": true, "code": "config_written", "path": path, "message": "Configuration written to %s" % path}
 
 
 func _build_stdio_entry(target: Dictionary) -> Dictionary:

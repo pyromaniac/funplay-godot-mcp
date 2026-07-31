@@ -3,6 +3,7 @@ extends RefCounted
 
 signal settings_changed
 
+const FunplayLocalization = preload("res://addons/funplay_mcp/core/funplay_localization.gd")
 const SETTINGS_PATH = "user://funplay_mcp_settings.cfg"
 
 var server_enabled: bool = true
@@ -12,19 +13,29 @@ var tool_profile: String = "core"
 var debug_logging_enabled: bool = false
 var execute_code_safety_checks_enabled: bool = true
 var disabled_tools: Array[String] = []
+var ui_language: String = FunplayLocalization.ENGLISH
+
+var _settings_path: String = SETTINGS_PATH
+var _settings_schema_needs_save: bool = false
 
 
-func _init() -> void:
+func _init(settings_path: String = SETTINGS_PATH) -> void:
+	_settings_path = settings_path
 	load_settings()
+	var should_save: bool = _settings_schema_needs_save
 	if server_auth_token == "":
 		server_auth_token = _generate_auth_token()
+		should_save = true
+	if should_save:
 		save_settings()
 
 
 func load_settings() -> void:
 	var config = ConfigFile.new()
-	var err = config.load(SETTINGS_PATH)
+	var err = config.load(_settings_path)
 	if err != OK:
+		ui_language = FunplayLocalization.default_language_for_locale()
+		_settings_schema_needs_save = true
 		return
 
 	server_enabled = bool(config.get_value("server", "enabled", true))
@@ -34,6 +45,11 @@ func load_settings() -> void:
 	debug_logging_enabled = bool(config.get_value("server", "debug_logging_enabled", false))
 	execute_code_safety_checks_enabled = bool(config.get_value("server", "execute_code_safety_checks_enabled", true))
 	disabled_tools = _normalize_string_array(config.get_value("tools", "disabled", []))
+	if config.has_section_key("ui", "language"):
+		ui_language = FunplayLocalization.normalize_language(str(config.get_value("ui", "language", FunplayLocalization.ENGLISH)))
+	else:
+		ui_language = FunplayLocalization.default_language_for_locale()
+		_settings_schema_needs_save = true
 
 
 func save_settings() -> void:
@@ -45,7 +61,9 @@ func save_settings() -> void:
 	config.set_value("server", "debug_logging_enabled", debug_logging_enabled)
 	config.set_value("server", "execute_code_safety_checks_enabled", execute_code_safety_checks_enabled)
 	config.set_value("tools", "disabled", disabled_tools)
-	config.save(SETTINGS_PATH)
+	config.set_value("ui", "language", ui_language)
+	config.save(_settings_path)
+	_settings_schema_needs_save = false
 
 
 func update_server_enabled(value: bool) -> void:
@@ -92,6 +110,15 @@ func update_execute_code_safety_checks_enabled(value: bool) -> void:
 	if execute_code_safety_checks_enabled == value:
 		return
 	execute_code_safety_checks_enabled = value
+	save_settings()
+	settings_changed.emit()
+
+
+func update_ui_language(value: String) -> void:
+	var normalized: String = FunplayLocalization.normalize_language(value)
+	if ui_language == normalized:
+		return
+	ui_language = normalized
 	save_settings()
 	settings_changed.emit()
 

@@ -1001,6 +1001,9 @@ func open_script(arguments: Dictionary) -> String:
 
 
 func get_play_state(_arguments: Dictionary) -> String:
+	var controller = _get_play_mode_controller()
+	if controller != null:
+		return _render_variant(controller.get_state())
 	var editor = _editor()
 	return _render_variant({
 		"is_playing_scene": editor.is_playing_scene(),
@@ -1012,32 +1015,23 @@ func get_play_state(_arguments: Dictionary) -> String:
 
 func enter_play_mode(arguments: Dictionary) -> String:
 	var mode = str(arguments.get("mode", "current")).to_lower()
-	var editor = _editor()
-
-	match mode:
-		"current":
-			editor.play_current_scene()
-		"main":
-			editor.play_main_scene()
-		"custom":
-			var scene_path = _normalize_path(str(arguments.get("scene_path", "")))
-			if scene_path == "":
-				return "Error: 'scene_path' is required when mode is 'custom'."
-			editor.play_custom_scene(scene_path)
-		_:
-			return "Error: Unsupported play mode '%s'." % mode
-
-	return "Entered play mode using '%s' scene selection." % mode
+	var scene_path: String = ""
+	if mode == "custom":
+		scene_path = _normalize_project_path(str(arguments.get("scene_path", "")))
+		if scene_path == "":
+			return _render_tool_error("CUSTOM_SCENE_REQUIRED", "A valid res:// scene_path is required when mode is custom.")
+	return _request_play_mode_start(mode, scene_path, arguments)
 
 
-func play_main_scene(_arguments: Dictionary) -> String:
-	_editor().play_main_scene()
-	return "Started the main scene."
+func play_main_scene(arguments: Dictionary) -> String:
+	return _request_play_mode_start("main", "", arguments)
 
 
 func exit_play_mode(_arguments: Dictionary) -> String:
-	_editor().stop_playing_scene()
-	return "Stopped the running scene."
+	var controller = _get_play_mode_controller()
+	if controller == null:
+		return _render_tool_error("PLAY_MODE_UNAVAILABLE", "The play-mode controller is unavailable.")
+	return _render_variant(controller.request_stop())
 
 
 func simulate_action(arguments: Dictionary) -> String:
@@ -3899,6 +3893,22 @@ func _collect_scene_nodes_by_id(node: Node, results: Dictionary) -> void:
 
 func _editor():
 	return _plugin.get_editor_interface()
+
+
+func _get_play_mode_controller():
+	if _plugin != null and _plugin.has_method("get_play_mode_controller"):
+		return _plugin.get_play_mode_controller()
+	return null
+
+
+func _request_play_mode_start(mode: String, scene_path: String, arguments: Dictionary) -> String:
+	var controller = _get_play_mode_controller()
+	if controller == null:
+		return _render_tool_error("PLAY_MODE_UNAVAILABLE", "The play-mode controller is unavailable.")
+	return _render_variant(controller.request_start(mode, scene_path, {
+		"restart_if_running": bool(arguments.get("restart_if_running", false)),
+		"allow_multiple_instances": bool(arguments.get("allow_multiple_instances", false)),
+	}))
 
 
 func _get_editor_settings():

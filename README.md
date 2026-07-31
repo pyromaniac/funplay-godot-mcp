@@ -61,6 +61,7 @@ If that port is already occupied, it automatically picks another free local port
 Local MCP POST requests require the per-project auth token stored in `user://funplay_mcp_settings.cfg`; the dock writes it into generated stdio client configs automatically.
 Authenticated clients can run high-impact editor tools, including `execute_code`; keep the server enabled only while working with trusted local clients and leave safety checks on unless you intentionally need to override them.
 The dock also shows the installed addon version and includes a **Check Updates** action that opens the latest GitHub Release when a newer version is available.
+Use the **Language** selector at the top of the dock to switch between English and Simplified Chinese. The choice is saved in `user://funplay_mcp_settings.cfg` and restored the next time the project opens.
 
 ### 3. Configure Your AI Client
 
@@ -81,7 +82,7 @@ If you prefer to edit config files manually, use the examples below as fallback 
     "funplay": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "funplay-godot-mcp@0.9.6"],
+      "args": ["-y", "funplay-godot-mcp@0.10.0"],
       "env": {
         "FUNPLAY_GODOT_MCP_URL": "http://127.0.0.1:8765/",
         "FUNPLAY_GODOT_MCP_TOKEN": "<token from Funplay MCP dock>"
@@ -101,7 +102,7 @@ If you prefer to edit config files manually, use the examples below as fallback 
   "mcpServers": {
     "funplay": {
       "command": "npx",
-      "args": ["-y", "funplay-godot-mcp@0.9.6"],
+      "args": ["-y", "funplay-godot-mcp@0.10.0"],
       "env": {
         "FUNPLAY_GODOT_MCP_URL": "http://127.0.0.1:8765/",
         "FUNPLAY_GODOT_MCP_TOKEN": "<token from Funplay MCP dock>"
@@ -122,7 +123,7 @@ If you prefer to edit config files manually, use the examples below as fallback 
     "funplay": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "funplay-godot-mcp@0.9.6"],
+      "args": ["-y", "funplay-godot-mcp@0.10.0"],
       "env": {
         "FUNPLAY_GODOT_MCP_URL": "http://127.0.0.1:8765/",
         "FUNPLAY_GODOT_MCP_TOKEN": "<token from Funplay MCP dock>"
@@ -190,9 +191,11 @@ Open your AI client and try: *"Create a 2D HUD with health bar, score label, and
 - This addon is **Editor-only**. It does not add runtime components to your exported game.
 - The MCP server starts on `http://127.0.0.1:8765/` by default. If the same project already owns that port, the dock attaches to it; otherwise it falls back to another free local port.
 - Local MCP server settings are stored in `user://funplay_mcp_settings.cfg`.
+- The language selector localizes the Dock UI only; MCP tool names, protocol fields, and generated client configuration identifiers remain stable in English for compatibility.
 - The addon defaults to the `core` MCP tool profile to reduce tool-list noise for AI clients. Switch to `full` in the dock if you want the complete tool surface.
 - The dock includes a Tool Exposure panel for disabling individual tools within the active profile, plus optional debug logging and `execute_code` safety toggles.
 - `execute_code` safety checks are on by default for common process, filesystem, and project-setting mutations. A reviewed call can pass `safety_checks=false`.
+- Play-mode requests are deferred until after the MCP response is sent and repeated calls are idempotent. Projects configured for more than one run instance must pass `allow_multiple_instances=true`; use `restart_if_running=true` only for an intentional restart, then inspect `get_play_state` for the confirmed transition.
 - The dock can check GitHub Releases for newer addon versions and surface whether release zip, manifest, SHA256, and `server.json` artifacts are present.
 - Focused MCP tools run directly. There is no extra approval toggle inside the addon.
 - The built-in dock can copy or write recommended MCP config entries for Codex, Claude Code, Cursor, and VS Code.
@@ -202,11 +205,12 @@ Open your AI client and try: *"Create a 2D HUD with health bar, score label, and
 - **`execute_code` First** — The addon is optimized around one high-flexibility GDScript execution tool for rich editor/runtime orchestration, now with default-on safety checks for risky snippets
 - **Tool Exposure Control** — Toggle individual tools from the Godot dock without editing addon code or restarting the project
 - **Dock Dashboard** — See server state, tool exposure, runtime bridge heartbeat, release readiness, and project map actions inside Godot
+- **Bilingual Dock UI** — Switch Dock controls, tooltips, and operational status between English and Simplified Chinese with a persisted per-project preference
 - **Project Skills** — Generate project-local AI guidance files that capture the current endpoint, tool profile, project context, and recommended Funplay workflow
 - **Tool Catalog & Help** — Query grouped tool catalogs, capability gates, workflow coverage, and task-specific guidance from MCP
 - **Project Map & Templates** — Inspect scenes, scripts, functions, signals, usage links, a searchable browser graph, and dry-run script refactor plans
 - **Runtime Bridge** — Optionally install a lightweight autoload for play-mode heartbeat, scene-tree snapshots, node queries, runtime screenshots, input injection, and event history
-- **Play Mode Automation** — Enter play mode, simulate input, inspect logs, capture editor views, and validate behavior from the same MCP session
+- **Safe Play Mode Automation** — Queue and confirm idempotent start/stop transitions, explicitly opt in to multi-instance runs, simulate input, inspect logs, and validate behavior from the same MCP session
 - **Project Context Built In** — Exposes live resources for project state, active scene, selection, play state, script errors, logs, and MCP interaction history
 - **Focused by Default, Full When Needed** — `core` exposes a compact high-signal toolset; `full` exposes a broader editor automation surface
 - **Single Godot Addon** — No extra approval UI, no external Python daemon required for the Godot-side plugin itself
